@@ -1,24 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { runtimeConfig } from "../config/runtime";
+import { ONLINE_FEATURES_ENABLED, runtimeConfig } from "../config/runtime";
 
 const RUNTIME_TOGGLES_STORAGE_KEY = "pal.runtime.toggles.v1";
 const RUNTIME_MODELS_STORAGE_KEY = "pal.runtime.models.v1";
+const DISABLED_LOCAL_TOGGLES = {
+  LOCAL_LLM: false,
+  STT_LOCAL: false,
+  TTS_LOCAL: false,
+};
 
 function loadRuntimeToggles() {
   try {
     const raw = localStorage.getItem(RUNTIME_TOGGLES_STORAGE_KEY);
     if (!raw) {
-      return { ...runtimeConfig.toggles };
+      return { ...DISABLED_LOCAL_TOGGLES };
     }
-    const parsed = JSON.parse(raw) as Partial<typeof runtimeConfig.toggles>;
+    JSON.parse(raw);
     return {
-      LOCAL_LLM: typeof parsed.LOCAL_LLM === "boolean" ? parsed.LOCAL_LLM : runtimeConfig.toggles.LOCAL_LLM,
-      STT_LOCAL: typeof parsed.STT_LOCAL === "boolean" ? parsed.STT_LOCAL : runtimeConfig.toggles.STT_LOCAL,
-      TTS_LOCAL: typeof parsed.TTS_LOCAL === "boolean" ? parsed.TTS_LOCAL : runtimeConfig.toggles.TTS_LOCAL,
+      ...DISABLED_LOCAL_TOGGLES,
     };
   } catch {
-    return { ...runtimeConfig.toggles };
+    return { ...DISABLED_LOCAL_TOGGLES };
   }
 }
 
@@ -45,11 +48,23 @@ export function useRuntimeConfigState() {
   const [runtimeModelsState, setRuntimeModelsState] = useState(() => loadRuntimeModels());
 
   useEffect(() => {
-    runtimeConfig.toggles.LOCAL_LLM = runtimeTogglesState.LOCAL_LLM;
-    runtimeConfig.toggles.STT_LOCAL = runtimeTogglesState.STT_LOCAL;
-    runtimeConfig.toggles.TTS_LOCAL = runtimeTogglesState.TTS_LOCAL;
+    const hasEnabledLocalToggle = runtimeTogglesState.LOCAL_LLM
+      || runtimeTogglesState.STT_LOCAL
+      || runtimeTogglesState.TTS_LOCAL;
+    if (hasEnabledLocalToggle) {
+      setRuntimeTogglesState({ ...DISABLED_LOCAL_TOGGLES });
+    }
+    runtimeConfig.toggles.LOCAL_LLM = false;
+    runtimeConfig.toggles.STT_LOCAL = false;
+    runtimeConfig.toggles.TTS_LOCAL = false;
+  }, [runtimeTogglesState.LOCAL_LLM, runtimeTogglesState.STT_LOCAL, runtimeTogglesState.TTS_LOCAL]);
+
+  useEffect(() => {
+    runtimeConfig.toggles.LOCAL_LLM = false;
+    runtimeConfig.toggles.STT_LOCAL = false;
+    runtimeConfig.toggles.TTS_LOCAL = false;
     try {
-      localStorage.setItem(RUNTIME_TOGGLES_STORAGE_KEY, JSON.stringify(runtimeTogglesState));
+      localStorage.setItem(RUNTIME_TOGGLES_STORAGE_KEY, JSON.stringify(DISABLED_LOCAL_TOGGLES));
     } catch {
       // Ignore storage errors in restricted environments.
     }
@@ -67,9 +82,11 @@ export function useRuntimeConfigState() {
   }, [runtimeModelsState]);
 
   const handleRuntimeModeChange = useCallback((mode: "cloud" | "local") => {
-    const nextLocalEnabled = mode === "local";
-    runtimeConfig.toggles.LOCAL_LLM = nextLocalEnabled;
-    setRuntimeTogglesState((previous) => ({ ...previous, LOCAL_LLM: nextLocalEnabled }));
+    if (!ONLINE_FEATURES_ENABLED && mode === "cloud") {
+      return;
+    }
+    runtimeConfig.toggles.LOCAL_LLM = false;
+    setRuntimeTogglesState({ ...DISABLED_LOCAL_TOGGLES });
   }, []);
 
   return {
@@ -77,7 +94,7 @@ export function useRuntimeConfigState() {
     setRuntimeTogglesState,
     runtimeModelsState,
     setRuntimeModelsState,
-    runtimeMode: (runtimeTogglesState.LOCAL_LLM ? "local" : "cloud") as "local" | "cloud",
+    runtimeMode: "cloud" as "local" | "cloud",
     handleRuntimeModeChange,
   };
 }
