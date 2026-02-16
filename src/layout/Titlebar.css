@@ -1,0 +1,230 @@
+/* Custom Titlebar Styles */
+.titlebar {
+  position: fixed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 38px;
+  width: 100vw;
+  padding: 0 8px 0 12px;
+  background: transparent;
+  border-bottom: none;
+  user-select: none;
+  -webkit-app-region: drag;
+  z-index: 9999;
+  flex-shrink: 0;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 1;
+}
+
+.titlebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: none;
+  pointer-events: none;
+}
+
+.titlebar-drag-region {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titlebar-logo {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+}
+
+.titlebar-logo-image {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.titlebar-title {
+  font-family: "Sora", "Segoe UI", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(230, 242, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-menu-btn {
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(104, 148, 255, 0.25);
+  background: rgba(21, 33, 59, 0.66);
+  color: rgba(218, 232, 255, 0.86);
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.titlebar-menu-btn:hover {
+  border-color: rgba(115, 212, 255, 0.48);
+  background: rgba(34, 56, 94, 0.72);
+}
+
+.titlebar-btn {
+  position: relative;
+  width: 34px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(200, 220, 255, 0.82);
+  display: grid;
+  place-items: center;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  cursor: pointer;
+}
+
+.titlebar-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.titlebar-btn:hover {
+  background: rgba(80, 120, 180, 0.25);
+  color: rgba(235, 248, 255, 0.98);
+}
+
+.titlebar-btn:active {
+  transform: scale(0.94);
+  background: rgba(80, 120, 180, 0.35);
+}
+
+/* Minimize button specific styles */
+.titlebar-btn-minimize:hover {
+  background: rgba(100, 180, 255, 0.22);
+}
+
+/* Maximize button specific styles */
+.titlebar-btn-maximize:hover {
+  background: rgba(100, 220, 160, 0.22);
+}
+
+/* Close button specific styles */
+.titlebar-btn-close:hover {
+  background: rgba(255, 90, 95, 0.72);
+  color: white;
+}
+
+.titlebar-btn-close:active {
+  background: rgba(255, 70, 75, 0.88);
+}
+
+/* Focus styles for accessibility */
+.titlebar-btn:focus-visible {
+  outline: 2px solid rgba(109, 234, 255, 0.65);
+  outline-offset: 1px;
+}
+
+/* Cloud / Local toggle in the titlebar */
+.cloud-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.mode-btn {
+  min-width: 54px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(103, 146, 255, 0.12);
+  background: rgba(24, 36, 60, 0.56);
+  color: rgba(200, 220, 255, 0.82);
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.12s ease, transform 0.05s ease;
+}
+
+.mode-btn:hover { transform: translateY(-1px); }
+
+.mode-btn.is-active {
+  background: linear-gradient(130deg, rgba(70, 188, 245, 0.76), rgba(76, 117, 255, 0.82));
+  color: #f7ffff;
+  border-color: rgba(70, 188, 245, 0.9);
+}
+
+/* Animations */
+@keyframes titlebar-shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(109, 234, 255, 0.55), inset 0 -2px 4px rgba(8, 20, 50, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(109, 234, 255, 0.75), inset 0 -2px 4px rgba(8, 20, 50, 0.35);
+  }
+}
+
+/* Tooltip styles for hover */
+.titlebar-btn[title] {
+  position: relative;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .titlebar {
+    border-bottom-color: rgba(255, 255, 255, 0.4);
+  }
+  
+  .titlebar-btn {
+    border: 1px solid transparent;
+  }
+  
+  .titlebar-btn:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .titlebar-btn-close:hover {
+    border-color: rgba(255, 100, 100, 0.8);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-btn {
+    transition: none;
+  }
+  
+  .titlebar-logo-image {
+    animation: none;
+  }
+}
