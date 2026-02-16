@@ -1,0 +1,91 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap");
+
+:root {
+  --pal-bg-root: #050a17;
+  --pal-bg-panel: #0d1836;
+  --pal-bg-panel-strong: #101f43;
+  --pal-border-soft: rgba(110, 153, 255, 0.24);
+  --pal-text-main: #f3f8ff;
+  --pal-text-soft: rgba(184, 205, 242, 0.76);
+  --pal-shadow-glow: 0 0 24px rgba(109, 234, 255, 0.32);
+  --pal-radius-2xl: 30px;
+
+  /* Token mirror for utility-first style workflows. */
+  --tw-bg-base: #050a17;
+  --tw-bg-surface: #0d1836;
+  --tw-border-accent: rgba(110, 153, 255, 0.28);
+  --tw-text-primary: #f3f8ff;
+  --tw-text-muted: rgba(184, 205, 242, 0.76);
+  --tw-ring-color: rgba(109, 234, 255, 0.54);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  color: var(--pal-text-main);
+  background:
+    radial-gradient(circle at 20% 15%, rgba(74, 131, 255, 0.14), transparent 38%),
+    radial-gradient(circle at 80% 82%, rgba(65, 210, 255, 0.12), transparent 40%),
+    var(--pal-bg-root);
+  letter-spacing: 0.01em;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  color: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+code {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(12, 22, 45, 0.62);
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(12, 22, 45, 0.62);
+  background: linear-gradient(180deg, rgba(99, 187, 255, 0.68), rgba(121, 143, 255, 0.72));
+}
