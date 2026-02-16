@@ -1,0 +1,227 @@
+import { runtimeConfig } from "../config/runtime";
+import type { AssistantMode, PalUiSettings, RuntimeModels, RuntimeToggles } from "../types/pal";
+
+interface SettingsSectionProps {
+  settings: PalUiSettings;
+  modeOptions: Array<{ id: AssistantMode; label: string }>;
+  updateAssistantMode: (mode: string) => void;
+  updateVoice: (voice: string) => void;
+  updateSpeechStyle: (style: string) => void;
+  runtimeTogglesState: RuntimeToggles;
+  setRuntimeTogglesState: (value: RuntimeToggles) => void;
+  runtimeModelsState: RuntimeModels;
+  setRuntimeModelsState: (value: RuntimeModels) => void;
+  setAutoSpeak: (enabled: boolean) => void;
+  setMinimizeToTray: (enabled: boolean) => void;
+}
+
+export function SettingsSection({
+  settings,
+  modeOptions,
+  updateAssistantMode,
+  updateVoice,
+  updateSpeechStyle,
+  runtimeTogglesState,
+  setRuntimeTogglesState,
+  runtimeModelsState,
+  setRuntimeModelsState,
+  setAutoSpeak,
+  setMinimizeToTray,
+}: SettingsSectionProps) {
+  return (
+    <section className="pal-settings-panel">
+      <header className="pal-page-header">
+        <h2>Settings</h2>
+        <p>Tune voice behavior, model routing, and runtime options.</p>
+      </header>
+
+      <div className="pal-settings-layout">
+        <article className="pal-setting-block">
+          <h3>Voice & Persona</h3>
+          <div className="pal-setting-row">
+            <label htmlFor="mode-select">Conversation mode</label>
+            <select
+              id="mode-select"
+              value={settings.assistantMode}
+              onChange={(event) => {
+                updateAssistantMode(event.target.value);
+              }}
+            >
+              {modeOptions.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="pal-setting-row">
+            <label htmlFor="voice-select">Voice profile</label>
+            <select
+              id="voice-select"
+              value={settings.voice}
+              onChange={(event) => {
+                updateVoice(event.target.value);
+              }}
+            >
+              <option value="autumn">autumn</option>
+              <option value="diana">diana</option>
+              <option value="hannah">hannah</option>
+              <option value="austin">austin</option>
+              <option value="daniel">daniel</option>
+              <option value="troy">troy</option>
+            </select>
+          </div>
+
+          <div className="pal-setting-row">
+            <label htmlFor="style-select">Delivery style</label>
+            <select
+              id="style-select"
+              value={settings.speechStyle}
+              onChange={(event) => {
+                updateSpeechStyle(event.target.value);
+              }}
+            >
+              <option value="natural">natural</option>
+              <option value="cheerful">cheerful</option>
+              <option value="professional">professional</option>
+              <option value="whisper">whisper</option>
+            </select>
+          </div>
+        </article>
+
+        <article className="pal-setting-block">
+          <h3>Runtime</h3>
+          <div className="pal-setting-switch">
+            <label htmlFor="toggle-local-llm">Use local LLM</label>
+            <label className="pal-switch-control" htmlFor="toggle-local-llm">
+              <input
+                id="toggle-local-llm"
+                type="checkbox"
+                checked={runtimeTogglesState.LOCAL_LLM}
+                onChange={(event) => {
+                  runtimeConfig.toggles.LOCAL_LLM = event.target.checked;
+                  setRuntimeTogglesState({ ...runtimeTogglesState, LOCAL_LLM: event.target.checked });
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <div className="pal-setting-switch">
+            <label htmlFor="toggle-local-stt">Use local STT</label>
+            <label className="pal-switch-control" htmlFor="toggle-local-stt">
+              <input
+                id="toggle-local-stt"
+                type="checkbox"
+                checked={runtimeTogglesState.STT_LOCAL}
+                onChange={(event) => {
+                  runtimeConfig.toggles.STT_LOCAL = event.target.checked;
+                  setRuntimeTogglesState({ ...runtimeTogglesState, STT_LOCAL: event.target.checked });
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <div className="pal-setting-switch">
+            <label htmlFor="toggle-local-tts">Use local TTS</label>
+            <label className="pal-switch-control" htmlFor="toggle-local-tts">
+              <input
+                id="toggle-local-tts"
+                type="checkbox"
+                checked={runtimeTogglesState.TTS_LOCAL}
+                onChange={(event) => {
+                  runtimeConfig.toggles.TTS_LOCAL = event.target.checked;
+                  setRuntimeTogglesState({ ...runtimeTogglesState, TTS_LOCAL: event.target.checked });
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+
+          <div className="pal-setting-row">
+            <label htmlFor="chat-model">Chat model</label>
+            <select
+              id="chat-model"
+              value={runtimeModelsState.chat}
+              onChange={(event) => {
+                runtimeConfig.models.chat = event.target.value;
+                setRuntimeModelsState({ ...runtimeModelsState, chat: event.target.value });
+              }}
+            >
+              <option value={runtimeConfig.models.chat}>{runtimeConfig.models.chat}</option>
+              <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+              <option value="gemma-3-4b-it-q4_0">gemma-3-4b-it-q4_0</option>
+            </select>
+          </div>
+
+          <div className="pal-setting-row">
+            <label htmlFor="stt-model">Speech-to-text model</label>
+            <select
+              id="stt-model"
+              value={runtimeModelsState.stt}
+              onChange={(event) => {
+                runtimeConfig.models.stt = event.target.value;
+                setRuntimeModelsState({ ...runtimeModelsState, stt: event.target.value });
+              }}
+            >
+              <option value={runtimeConfig.models.stt}>{runtimeConfig.models.stt}</option>
+              <option value="whisper-large-v3-turbo">whisper-large-v3-turbo</option>
+              <option value="whisper-small">whisper-small</option>
+            </select>
+          </div>
+
+          <div className="pal-setting-row">
+            <label htmlFor="tts-model">Text-to-speech model</label>
+            <select
+              id="tts-model"
+              value={runtimeModelsState.tts}
+              onChange={(event) => {
+                runtimeConfig.models.tts = event.target.value;
+                setRuntimeModelsState({ ...runtimeModelsState, tts: event.target.value });
+              }}
+            >
+              <option value={runtimeConfig.models.tts}>{runtimeConfig.models.tts}</option>
+              <option value="canopylabs/orpheus-v1-english">canopylabs/orpheus-v1-english</option>
+              <option value="canopylabs/orpheus-v1-multilingual">canopylabs/orpheus-v1-multilingual</option>
+            </select>
+          </div>
+        </article>
+
+        <article className="pal-setting-block">
+          <h3>Behavior</h3>
+          <div className="pal-setting-switch">
+            <label htmlFor="auto-speak">Auto-play TTS replies</label>
+            <label className="pal-switch-control" htmlFor="auto-speak">
+              <input
+                id="auto-speak"
+                type="checkbox"
+                checked={settings.autoSpeak}
+                onChange={(event) => {
+                  setAutoSpeak(event.target.checked);
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <div className="pal-setting-switch">
+            <label htmlFor="minimize-to-tray">Minimize to tray</label>
+            <label className="pal-switch-control" htmlFor="minimize-to-tray">
+              <input
+                id="minimize-to-tray"
+                type="checkbox"
+                checked={settings.minimizeToTray}
+                onChange={(event) => {
+                  setMinimizeToTray(event.target.checked);
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <p className="pal-setting-hint">
+            When enabled, minimize and close will hide the app to the system tray.
+          </p>
+        </article>
+      </div>
+    </section>
+  );
+}
