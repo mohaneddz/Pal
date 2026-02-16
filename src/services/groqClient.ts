@@ -232,7 +232,7 @@ function chunkSpeechInput(input: string, maxChunkSize = 190): string[] {
 
 function buildSpeechInput(text: string, style: SpeechStyle): string {
   const trimmed = text.trim();
-  if (style === "natural") {
+  if (style === "natural" || style === "neutral") {
     return trimmed;
   }
   return `[${style}] ${trimmed}`;

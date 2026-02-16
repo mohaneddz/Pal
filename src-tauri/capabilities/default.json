@@ -82,6 +82,7 @@
       "deny": []
     },
     "clipboard-manager:default",
-    "shell:default"
+    "shell:default",
+    "global-shortcut:default"
   ]
 }

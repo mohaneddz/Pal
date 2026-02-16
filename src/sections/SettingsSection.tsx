@@ -1,4 +1,4 @@
-import { runtimeConfig } from "../config/runtime";
+import { ONLINE_FEATURES_ENABLED, ONLINE_FEATURES_FUTURE_HINT, runtimeConfig } from "../config/runtime";
 import type { AssistantMode, PalUiSettings, RuntimeModels, RuntimeToggles } from "../types/pal";
 
 interface SettingsSectionProps {
@@ -28,6 +28,8 @@ export function SettingsSection({
   setAutoSpeak,
   setMinimizeToTray,
 }: SettingsSectionProps) {
+  const LOCAL_RUNTIME_DISABLED_HINT = "Local runtime is disabled in this build.";
+
   return (
     <section className="pal-settings-panel">
       <header className="pal-page-header">
@@ -83,6 +85,7 @@ export function SettingsSection({
               }}
             >
               <option value="natural">natural</option>
+              <option value="neutral">neutral</option>
               <option value="cheerful">cheerful</option>
               <option value="professional">professional</option>
               <option value="whisper">whisper</option>
@@ -99,6 +102,8 @@ export function SettingsSection({
                 id="toggle-local-llm"
                 type="checkbox"
                 checked={runtimeTogglesState.LOCAL_LLM}
+                disabled
+                title={LOCAL_RUNTIME_DISABLED_HINT}
                 onChange={(event) => {
                   runtimeConfig.toggles.LOCAL_LLM = event.target.checked;
                   setRuntimeTogglesState({ ...runtimeTogglesState, LOCAL_LLM: event.target.checked });
@@ -114,6 +119,8 @@ export function SettingsSection({
                 id="toggle-local-stt"
                 type="checkbox"
                 checked={runtimeTogglesState.STT_LOCAL}
+                disabled
+                title={LOCAL_RUNTIME_DISABLED_HINT}
                 onChange={(event) => {
                   runtimeConfig.toggles.STT_LOCAL = event.target.checked;
                   setRuntimeTogglesState({ ...runtimeTogglesState, STT_LOCAL: event.target.checked });
@@ -129,6 +136,8 @@ export function SettingsSection({
                 id="toggle-local-tts"
                 type="checkbox"
                 checked={runtimeTogglesState.TTS_LOCAL}
+                disabled
+                title={LOCAL_RUNTIME_DISABLED_HINT}
                 onChange={(event) => {
                   runtimeConfig.toggles.TTS_LOCAL = event.target.checked;
                   setRuntimeTogglesState({ ...runtimeTogglesState, TTS_LOCAL: event.target.checked });
@@ -143,6 +152,8 @@ export function SettingsSection({
             <select
               id="chat-model"
               value={runtimeModelsState.chat}
+              disabled={!ONLINE_FEATURES_ENABLED}
+              title={!ONLINE_FEATURES_ENABLED ? ONLINE_FEATURES_FUTURE_HINT : undefined}
               onChange={(event) => {
                 runtimeConfig.models.chat = event.target.value;
                 setRuntimeModelsState({ ...runtimeModelsState, chat: event.target.value });
@@ -159,6 +170,8 @@ export function SettingsSection({
             <select
               id="stt-model"
               value={runtimeModelsState.stt}
+              disabled={!ONLINE_FEATURES_ENABLED}
+              title={!ONLINE_FEATURES_ENABLED ? ONLINE_FEATURES_FUTURE_HINT : undefined}
               onChange={(event) => {
                 runtimeConfig.models.stt = event.target.value;
                 setRuntimeModelsState({ ...runtimeModelsState, stt: event.target.value });
@@ -175,6 +188,8 @@ export function SettingsSection({
             <select
               id="tts-model"
               value={runtimeModelsState.tts}
+              disabled={!ONLINE_FEATURES_ENABLED}
+              title={!ONLINE_FEATURES_ENABLED ? ONLINE_FEATURES_FUTURE_HINT : undefined}
               onChange={(event) => {
                 runtimeConfig.models.tts = event.target.value;
                 setRuntimeModelsState({ ...runtimeModelsState, tts: event.target.value });
@@ -196,6 +211,8 @@ export function SettingsSection({
                 id="auto-speak"
                 type="checkbox"
                 checked={settings.autoSpeak}
+                disabled={!ONLINE_FEATURES_ENABLED}
+                title={!ONLINE_FEATURES_ENABLED ? ONLINE_FEATURES_FUTURE_HINT : undefined}
                 onChange={(event) => {
                   setAutoSpeak(event.target.checked);
                 }}

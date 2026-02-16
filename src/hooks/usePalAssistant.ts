@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { load, type Store } from "@tauri-apps/plugin-store";
 
-import { hasGroqKey, runtimeConfig } from "../config/runtime";
+import { hasGroqKey, ONLINE_FEATURES_ENABLED, runtimeConfig } from "../config/runtime";
 import {
   completeWithGroq,
   getGroqQuotaSnapshot,
@@ -172,6 +172,10 @@ function toErrorMessage(error: unknown): string {
   return "Something failed while processing your request.";
 }
 
+function cloudDisabledMessage(): string {
+  return "Cloud features are currently disabled for future updates.";
+}
+
 function isSpeechStatus(status: AssistantStatus): boolean {
   return SPEAKING_STATUSES.includes(status);
 }
@@ -181,7 +185,7 @@ function isVoicePersona(value: string): value is VoicePersona {
 }
 
 function isSpeechStyle(value: string): value is SpeechStyle {
-  return ["natural", "cheerful", "professional", "whisper"].includes(value);
+  return ["natural", "neutral", "cheerful", "professional", "whisper"].includes(value);
 }
 
 function isAssistantMode(value: string): value is AssistantMode {
@@ -301,6 +305,7 @@ export interface UsePalAssistantResult {
   setDraft: (value: string) => void;
   sendDraft: () => Promise<void>;
   sendQuickPrompt: (prompt: string) => Promise<void>;
+  speakText: (text: string) => Promise<void>;
   clearConversation: () => void;
   toggleListening: () => Promise<void>;
   stopSpeaking: () => void;
@@ -330,6 +335,7 @@ export function usePalAssistant(): UsePalAssistantResult {
   const storeRef = useRef<Store | null>(null);
   const storeHydratedRef = useRef(false);
   const apiUsageRef = useRef(apiUsage);
+  const settingsRef = useRef(settings);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -368,11 +374,15 @@ export function usePalAssistant(): UsePalAssistantResult {
     apiUsageRef.current = apiUsage;
   }, [apiUsage]);
 
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   const persistStateSnapshot = useCallback(
     async (
       currentMessages: ChatMessage[],
       allHistoryMessages: ChatMessage[],
-      nextSettings: PalUiSettings = settings,
+      nextSettings: PalUiSettings = settingsRef.current,
       nextApiUsage: ApiUsageStats = apiUsageRef.current,
     ) => {
       const store = storeRef.current;
@@ -396,7 +406,7 @@ export function usePalAssistant(): UsePalAssistantResult {
         // Ignore storage errors in environments with disabled storage.
       }
     },
-    [settings],
+    [],
   );
 
   useEffect(() => {
@@ -412,7 +422,7 @@ export function usePalAssistant(): UsePalAssistantResult {
 
         storeRef.current = store;
 
-        const [storedCurrent, storedHistory, storedSettings] = await Promise.all([
+        const [storedCurrent, storedHistory, storedSettings, storedApiUsage] = await Promise.all([
           store.get<unknown>(STORE_CURRENT_MESSAGES_KEY),
           store.get<unknown>(STORE_HISTORY_MESSAGES_KEY),
           store.get<unknown>(STORE_SETTINGS_KEY),
@@ -433,11 +443,11 @@ export function usePalAssistant(): UsePalAssistantResult {
           : mergedCurrent;
         const mergedHistory = mergeUniqueMessages(persistedHistoryOrCurrent, mergedHistoryBase);
         const hydratedSettings = settingsTouchedRef.current
-          ? settings
+          ? settingsRef.current
           : storedSettings
             ? sanitizeSettings(storedSettings)
-            : settings;
-        const hydratedApiUsage = sanitizeApiUsage(arguments[3]);
+            : settingsRef.current;
+        const hydratedApiUsage = sanitizeApiUsage(storedApiUsage);
 
         messagesRef.current = mergedCurrent;
         historyMessagesRef.current = mergedHistory;
@@ -463,7 +473,7 @@ export function usePalAssistant(): UsePalAssistantResult {
         void store.close();
       }
     };
-  }, [persistStateSnapshot, settings]);
+  }, [persistStateSnapshot]);
 
   useEffect(() => {
     if (!storeHydratedRef.current) {
@@ -873,6 +883,16 @@ export function usePalAssistant(): UsePalAssistantResult {
           return;
         }
 
+        if (!ONLINE_FEATURES_ENABLED) {
+          appendMessage(
+            "assistant",
+            `${cloudDisabledMessage()} Offline commands (timers, schedule digest, summarization, notes path) still work.`,
+          );
+          setStatus("idle");
+          setAudioLevel(0);
+          return;
+        }
+
         if (!hasGroqKey) {
           appendMessage(
             "assistant",
@@ -1123,6 +1143,11 @@ export function usePalAssistant(): UsePalAssistantResult {
     if (busyRef.current || isSpeechStatus(status)) {
       return;
     }
+    if (!ONLINE_FEATURES_ENABLED) {
+      setStatus("error");
+      setErrorMessage(cloudDisabledMessage());
+      return;
+    }
     if (runtimeConfig.toggles.STT_LOCAL) {
       setStatus("error");
       setErrorMessage("`STT_LOCAL=true` is not implemented in this TypeScript build.");
@@ -1212,6 +1237,55 @@ export function usePalAssistant(): UsePalAssistantResult {
       await runAssistantTurn(prompt);
     },
     [runAssistantTurn],
+  );
+
+  const speakText = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || busyRef.current) {
+        return;
+      }
+
+      setErrorMessage(null);
+
+      if (!ONLINE_FEATURES_ENABLED) {
+        setStatus("error");
+        setErrorMessage(cloudDisabledMessage());
+        return;
+      }
+
+      if (!hasGroqKey) {
+        setStatus("error");
+        setErrorMessage("Groq API key is missing. Add `VITE_GROQ_API_KEY` to enable speech synthesis.");
+        return;
+      }
+
+      if (runtimeConfig.toggles.TTS_LOCAL) {
+        setStatus("error");
+        setErrorMessage("`TTS_LOCAL=true` is not implemented in this TypeScript build.");
+        return;
+      }
+
+      try {
+        setStatus("processing");
+        markApiRequest("speech");
+        const audioChunks = await synthesizeWithGroq(trimmed, settings.voice, settings.speechStyle);
+        refreshQuotaSnapshot();
+        await playSpeechChunks(audioChunks);
+      } catch (error) {
+        markApiFailure();
+        setStatus("error");
+        setErrorMessage(toErrorMessage(error));
+      }
+    },
+    [
+      markApiFailure,
+      markApiRequest,
+      playSpeechChunks,
+      refreshQuotaSnapshot,
+      settings.speechStyle,
+      settings.voice,
+    ],
   );
 
   const clearConversation = useCallback(() => {
@@ -1313,10 +1387,11 @@ export function usePalAssistant(): UsePalAssistantResult {
       errorMessage,
       apiUsage,
       settings,
-      groqReady: hasGroqKey,
+      groqReady: hasGroqKey && ONLINE_FEATURES_ENABLED,
       setDraft,
       sendDraft,
       sendQuickPrompt,
+      speakText,
       clearConversation,
       toggleListening,
       stopSpeaking,
@@ -1338,6 +1413,7 @@ export function usePalAssistant(): UsePalAssistantResult {
       settings,
       sendDraft,
       sendQuickPrompt,
+      speakText,
       clearConversation,
       toggleListening,
       stopSpeaking,

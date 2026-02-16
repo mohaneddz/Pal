@@ -6,7 +6,7 @@ export type MessageRole = "user" | "assistant";
 
 export type VoicePersona = "autumn" | "diana" | "hannah" | "austin" | "daniel" | "troy";
 
-export type SpeechStyle = "natural" | "cheerful" | "professional" | "whisper";
+export type SpeechStyle = "natural" | "neutral" | "cheerful" | "professional" | "whisper";
 export type AssistantMode =
   | "advisor"
   | "therapist"

@@ -4,42 +4,68 @@ import "./Titlebar.css";
 
 interface TitlebarProps {
   minimizeToTray?: boolean;
-  runtimeMode?: "cloud" | "local";
-  onRuntimeModeChange?: (mode: "cloud" | "local") => void;
 }
 
 export function Titlebar({
   minimizeToTray = false,
-  runtimeMode,
-  onRuntimeModeChange,
 }: TitlebarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const appWindow = getCurrentWindow();
 
-  // Check window states
-  const checkWindowState = useCallback(async () => {
+  const syncWindowState = useCallback(async () => {
     try {
-      const maximized = await appWindow.isMaximized();
+      const [maximized, fullscreen] = await Promise.all([
+        appWindow.isMaximized(),
+        appWindow.isFullscreen(),
+      ]);
       setIsMaximized(maximized);
+      setIsFullscreen(fullscreen);
     } catch (error) {
       console.error("Failed to check window state:", error);
     }
   }, [appWindow]);
 
   useEffect(() => {
-    checkWindowState();
+    void syncWindowState();
 
     // Listen for resize events to update maximize state
     const handleResize = () => {
-      checkWindowState();
+      void syncWindowState();
     };
 
     window.addEventListener("resize", handleResize);
+
+    let unlisten: (() => void) | null = null;
+    void appWindow.onResized(() => {
+      void syncWindowState();
+    }).then((fn) => {
+      unlisten = fn;
+    }).catch(() => {
+      // Ignore listener setup failures outside Tauri.
+    });
+
     return () => {
       window.removeEventListener("resize", handleResize);
+      if (unlisten) {
+        unlisten();
+      }
     };
-  }, [checkWindowState]);
+  }, [appWindow, syncWindowState]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isFullscreen) {
+      root.classList.add("pal-window-fullscreen");
+    } else {
+      root.classList.remove("pal-window-fullscreen");
+    }
+
+    return () => {
+      root.classList.remove("pal-window-fullscreen");
+    };
+  }, [isFullscreen]);
 
   const handleMinimize = useCallback(async () => {
     try {
@@ -58,12 +84,12 @@ export function Titlebar({
       await appWindow.toggleMaximize();
       // Small delay to let the window state change
       setTimeout(() => {
-        checkWindowState();
+        void syncWindowState();
       }, 50);
     } catch (error) {
       console.error("Failed to toggle maximize:", error);
     }
-  }, [appWindow, checkWindowState]);
+  }, [appWindow, syncWindowState]);
 
   const handleClose = useCallback(async () => {
     try {
@@ -76,6 +102,38 @@ export function Titlebar({
       console.error("Failed to close window:", error);
     }
   }, [appWindow, minimizeToTray]);
+
+  const handleFullscreenToggle = useCallback(async () => {
+    try {
+      const fullscreen = await appWindow.isFullscreen();
+      await appWindow.setFullscreen(!fullscreen);
+      // Keep control state in sync after mode changes.
+      setTimeout(() => {
+        void syncWindowState();
+      }, 50);
+      return;
+    } catch (error) {
+      console.error("Failed to toggle fullscreen:", error);
+    }
+
+    // Fallback 1: maximize/restore when fullscreen APIs are unavailable.
+    try {
+      await appWindow.toggleMaximize();
+      setTimeout(() => {
+        void syncWindowState();
+      }, 50);
+      return;
+    } catch (error) {
+      console.error("Failed to toggle maximize fallback:", error);
+    }
+
+    // Fallback 2: browser fullscreen (dev/browser context).
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen();
+    }
+  }, [appWindow, syncWindowState]);
 
   const handleDragStart = useCallback(
     async (e: React.MouseEvent) => {
@@ -103,122 +161,123 @@ export function Titlebar({
     [handleMaximize]
   );
 
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const mod = event.ctrlKey || event.metaKey;
+      const shift = event.shiftKey;
+
+      if (key === "f11") {
+        event.preventDefault();
+        void handleFullscreenToggle();
+        return;
+      }
+
+      if (mod && shift && key === "m") {
+        event.preventDefault();
+        void handleMinimize();
+      }
+    };
+
+    // Capture phase improves reliability for keys that browsers/OS may handle.
+    window.addEventListener("keydown", handleKeydown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleKeydown, { capture: true });
+    };
+  }, [handleFullscreenToggle, handleMinimize]);
+
   return (
     <header
-      className="titlebar"
+      className={`titlebar ${isFullscreen ? "is-fullscreen" : ""}`}
       onMouseDown={handleDragStart}
       onDoubleClick={handleDoubleClick}
     >
-      {runtimeMode && onRuntimeModeChange && (
-        <div className="titlebar-left">
-          <div className="cloud-toggle" aria-label="Runtime mode">
-            <button
-              type="button"
-              className={`mode-btn ${runtimeMode === "cloud" ? "is-active" : ""}`}
-              onClick={() => {
-                onRuntimeModeChange("cloud");
-              }}
-              aria-pressed={runtimeMode === "cloud"}
-            >
-              Cloud
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${runtimeMode === "local" ? "is-active" : ""}`}
-              onClick={() => {
-                onRuntimeModeChange("local");
-              }}
-              aria-pressed={runtimeMode === "local"}
-            >
-              Local
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="titlebar-controls">
-        <button
-          type="button"
-          className="titlebar-btn titlebar-btn-minimize"
-          onClick={handleMinimize}
-          aria-label={minimizeToTray ? "Minimize to tray" : "Minimize"}
-          title={minimizeToTray ? "Minimize to tray" : "Minimize"}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M2 6h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-        </button>
+      {!isFullscreen && (
+        <div className="titlebar-controls">
+          <button
+            type="button"
+            className="titlebar-btn titlebar-btn-minimize"
+            onClick={handleMinimize}
+            aria-label={minimizeToTray ? "Minimize to tray" : "Minimize"}
+            title={minimizeToTray ? "Minimize to tray" : "Minimize"}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M2 6h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+          </button>
 
-        <button
-          type="button"
-          className="titlebar-btn titlebar-btn-maximize"
-          onClick={handleMaximize}
-          aria-label={isMaximized ? "Restore" : "Maximize"}
-          title={isMaximized ? "Restore" : "Maximize"}
-        >
-          {isMaximized ? (
+          <button
+            type="button"
+            className="titlebar-btn titlebar-btn-maximize"
+            onClick={handleMaximize}
+            aria-label={isMaximized ? "Restore" : "Maximize"}
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            {isMaximized ? (
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <path
+                  d="M3 8V4h4M1 10V6h4"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+                <rect
+                  x="5"
+                  y="2"
+                  width="5"
+                  height="5"
+                  rx="0.5"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  fill="none"
+                />
+                <rect
+                  x="2"
+                  y="5"
+                  width="5"
+                  height="5"
+                  rx="0.5"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  fill="none"
+                />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <rect
+                  x="2"
+                  y="2"
+                  width="8"
+                  height="8"
+                  rx="0.5"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  fill="none"
+                />
+              </svg>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="titlebar-btn titlebar-btn-close"
+            onClick={handleClose}
+            aria-label={minimizeToTray ? "Close to tray" : "Close"}
+            title={minimizeToTray ? "Close to tray" : "Close"}
+          >
             <svg viewBox="0 0 12 12" aria-hidden="true">
               <path
-                d="M3 8V4h4M1 10V6h4"
+                d="M2.5 2.5l7 7M9.5 2.5l-7 7"
                 stroke="currentColor"
                 strokeWidth="1.2"
                 strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-              <rect
-                x="5"
-                y="2"
-                width="5"
-                height="5"
-                rx="0.5"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                fill="none"
-              />
-              <rect
-                x="2"
-                y="5"
-                width="5"
-                height="5"
-                rx="0.5"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                fill="none"
               />
             </svg>
-          ) : (
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <rect
-                x="2"
-                y="2"
-                width="8"
-                height="8"
-                rx="0.5"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                fill="none"
-              />
-            </svg>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className="titlebar-btn titlebar-btn-close"
-          onClick={handleClose}
-          aria-label={minimizeToTray ? "Close to tray" : "Close"}
-          title={minimizeToTray ? "Close to tray" : "Close"}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path
-              d="M2.5 2.5l7 7M9.5 2.5l-7 7"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-      </div>
+          </button>
+        </div>
+      )}
     </header>
   );
 }
