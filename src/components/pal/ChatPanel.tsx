@@ -1,9 +1,13 @@
 import type { ChangeEvent, FormEvent, MutableRefObject } from "react";
+import { Copy, Ellipsis, Paperclip, PenLine, RefreshCcw, Volume2 } from "lucide-react";
 
+import { ONLINE_FEATURES_ENABLED, ONLINE_FEATURES_FUTURE_HINT } from "../../config/runtime";
 import type { ChatMessage } from "../../types/pal";
-import { formatTime, renderHighlightedText } from "./utils";
+import { formatTime } from "./utils";
+import { MessageMarkdown } from "./MessageMarkdown";
 
 interface ChatPanelProps {
+  collapsed: boolean;
   chatMenuOpen: boolean;
   setChatMenuOpen: (open: boolean) => void;
   setSearchQuery: (query: string) => void;
@@ -36,6 +40,9 @@ interface ChatPanelProps {
   stopSpeaking: () => void;
   canSendDraft: boolean;
   handleAttachmentSelected: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  sendQuickPrompt: (prompt: string) => Promise<void>;
+  speakText: (text: string) => Promise<void>;
+  composerInputRef: MutableRefObject<HTMLInputElement | null>;
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
   chatMenuRef: MutableRefObject<HTMLDivElement | null>;
   chatMenuToggleRef: MutableRefObject<HTMLButtonElement | null>;
@@ -44,6 +51,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({
+  collapsed,
   chatMenuOpen,
   setChatMenuOpen,
   setSearchQuery,
@@ -76,14 +84,33 @@ export function ChatPanel({
   stopSpeaking,
   canSendDraft,
   handleAttachmentSelected,
+  sendQuickPrompt,
+  speakText,
+  composerInputRef,
   fileInputRef,
   chatMenuRef,
   chatMenuToggleRef,
   chatScrollRef,
   searchInputRef,
 }: ChatPanelProps) {
+  const findPreviousUserPrompt = (targetMessageId: string): string | null => {
+    const targetIndex = messages.findIndex((entry) => entry.id === targetMessageId);
+    if (targetIndex <= 0) {
+      return null;
+    }
+
+    for (let index = targetIndex - 1; index >= 0; index -= 1) {
+      const candidate = messages[index];
+      if (candidate.role === "user") {
+        return candidate.content;
+      }
+    }
+
+    return null;
+  };
+
   return (
-    <aside className="pal-chat-panel">
+    <aside className={`pal-chat-panel ${collapsed ? "is-collapsed" : ""}`}>
       <div className="pal-chat-header">
         <div className="pal-chat-header-main">
           <button
@@ -104,29 +131,63 @@ export function ChatPanel({
               type="button"
               className="pal-chat-icon-btn"
               aria-label="Reuse last prompt"
+              title="Reuse last prompt"
+              data-tooltip="Reuse last prompt"
               onClick={handleReuseLastPrompt}
             >
-              ✎
+              <PenLine size={15} aria-hidden="true" />
             </button>
             <button
               type="button"
               className="pal-chat-icon-btn"
               aria-label="Attach text context"
+              title="Attach text context"
+              data-tooltip="Attach text context"
               onClick={openAttachmentPicker}
             >
-              ⊕
+              <Paperclip size={15} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              ref={chatMenuToggleRef}
-              className="pal-chat-icon-btn"
-              aria-label="More actions"
-              onClick={() => {
-                setChatMenuOpen(!chatMenuOpen);
-              }}
-            >
-              •••
-            </button>
+            <div className="pal-chat-menu-anchor">
+              <button
+                type="button"
+                ref={chatMenuToggleRef}
+                className="pal-chat-icon-btn"
+                aria-label="More actions"
+                title="Conversation actions"
+                data-tooltip="Conversation actions"
+                onClick={() => {
+                  setChatMenuOpen(!chatMenuOpen);
+                }}
+              >
+                <Ellipsis size={15} aria-hidden="true" />
+              </button>
+
+              {chatMenuOpen && (
+                <div ref={chatMenuRef} className="pal-chat-menu" role="menu" aria-label="Conversation actions">
+                  <button type="button" role="menuitem" onClick={() => void handleCopyTranscript()}>
+                    Copy transcript
+                  </button>
+                  <button type="button" role="menuitem" onClick={handleExportTranscript}>
+                    Export transcript
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => void handleCopyLastReply()}>
+                    Copy last reply
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      clearConversation();
+                      setAttachmentName(null);
+                      setChatMenuOpen(false);
+                      setComposerNotice("Conversation cleared.");
+                    }}
+                  >
+                    Clear chat
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -147,31 +208,6 @@ export function ChatPanel({
           />
         </label>
 
-        {chatMenuOpen && (
-          <div ref={chatMenuRef} className="pal-chat-menu" role="menu" aria-label="Conversation actions">
-            <button type="button" role="menuitem" onClick={() => void handleCopyTranscript()}>
-              Copy transcript
-            </button>
-            <button type="button" role="menuitem" onClick={handleExportTranscript}>
-              Export transcript
-            </button>
-            <button type="button" role="menuitem" onClick={() => void handleCopyLastReply()}>
-              Copy last reply
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                clearConversation();
-                setAttachmentName(null);
-                setChatMenuOpen(false);
-                setComposerNotice("Conversation cleared.");
-              }}
-            >
-              Clear chat
-            </button>
-          </div>
-        )}
       </div>
 
       <div ref={chatScrollRef} className="pal-chat-scroll">
@@ -190,7 +226,13 @@ export function ChatPanel({
           )}
         </div>
 
-        {!groqReady && (
+        {!ONLINE_FEATURES_ENABLED && (
+          <div className="pal-system-alert">
+            Cloud features are disabled for future updates.
+          </div>
+        )}
+
+        {ONLINE_FEATURES_ENABLED && !groqReady && (
           <div className="pal-system-alert">
             Add `VITE_GROQ_API_KEY` to `src/.env` to enable Groq requests.
           </div>
@@ -219,7 +261,7 @@ export function ChatPanel({
               <span>{message.role === "user" ? "You" : "Pal"}</span>
               <time>{formatTime(message.createdAt)}</time>
             </header>
-            <p>{renderHighlightedText(message.content, searchQuery)}</p>
+            <MessageMarkdown content={message.content} />
             <footer className="pal-bubble-actions">
               <button
                 type="button"
@@ -227,6 +269,7 @@ export function ChatPanel({
                   void copyToClipboard(message.content, "Copied message.");
                 }}
               >
+                <Copy size={13} aria-hidden="true" />
                 Copy
               </button>
               {message.role === "user" && (
@@ -237,8 +280,42 @@ export function ChatPanel({
                     setComposerNotice("Loaded message into composer.");
                   }}
                 >
+                  <PenLine size={13} aria-hidden="true" />
                   Reuse
                 </button>
+              )}
+              {message.role === "assistant" && (
+                <>
+                  <button
+                    type="button"
+                    title={ONLINE_FEATURES_ENABLED ? "Retry prompt" : ONLINE_FEATURES_FUTURE_HINT}
+                    onClick={() => {
+                      const previousPrompt = findPreviousUserPrompt(message.id);
+                      if (!previousPrompt) {
+                        setComposerNotice("No user prompt found to retry.");
+                        return;
+                      }
+                      void sendQuickPrompt(previousPrompt);
+                      setComposerNotice("Retrying previous prompt.");
+                    }}
+                    disabled={isProcessing || !ONLINE_FEATURES_ENABLED}
+                  >
+                    <RefreshCcw size={13} aria-hidden="true" />
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    title={ONLINE_FEATURES_ENABLED ? "Speak response" : ONLINE_FEATURES_FUTURE_HINT}
+                    onClick={() => {
+                      void speakText(message.content);
+                      setComposerNotice("Speaking message.");
+                    }}
+                    disabled={isProcessing || !ONLINE_FEATURES_ENABLED}
+                  >
+                    <Volume2 size={13} aria-hidden="true" />
+                    Speak
+                  </button>
+                </>
               )}
             </footer>
           </article>
@@ -275,15 +352,17 @@ export function ChatPanel({
         <button
           type="button"
           className={`pal-composer-mic is-${voiceUiState}`}
+          title={ONLINE_FEATURES_ENABLED ? "Toggle voice mode" : ONLINE_FEATURES_FUTURE_HINT}
           onClick={() => {
             void toggleListening();
           }}
           aria-label={voiceEnabled ? "Disable voice mode" : "Enable voice mode"}
-          disabled={isProcessing}
+          disabled={isProcessing || !ONLINE_FEATURES_ENABLED}
         >
           🎤
         </button>
         <input
+          ref={composerInputRef}
           type="text"
           value={draft}
           onChange={(event) => {
