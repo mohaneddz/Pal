@@ -4,8 +4,12 @@ import type { LucideIcon } from "lucide-react";
 import type { AssistantMode } from "../types/pal";
 
 interface HomeSectionProps {
+  showSidebarToggle?: boolean;
+  showChatToggle?: boolean;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  chatPanelOpen: boolean;
+  toggleChatPanel: () => void;
   modeMenuOpen: boolean;
   setModeMenuOpen: (open: boolean) => void;
   modeMenuRef: MutableRefObject<HTMLDivElement | null>;
@@ -36,8 +40,12 @@ interface HomeSectionProps {
 }
 
 export function HomeSection({
+  showSidebarToggle = true,
+  showChatToggle = true,
   sidebarOpen,
   setSidebarOpen,
+  chatPanelOpen,
+  toggleChatPanel,
   modeMenuOpen,
   setModeMenuOpen,
   modeMenuRef,
@@ -61,17 +69,31 @@ export function HomeSection({
   return (
     <section className="pal-hero-panel">
       <div className="pal-hero-controls">
-        <button
-          type="button"
-          className="pal-sidebar-toggle"
-          onClick={() => {
-            setSidebarOpen(!sidebarOpen);
-          }}
-          aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-          title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-        >
-          {sidebarOpen ? "Close menu" : "Open menu"}
-        </button>
+        {showSidebarToggle ? (
+          <button
+            type="button"
+            className="pal-sidebar-toggle"
+            onClick={() => {
+              setSidebarOpen(!sidebarOpen);
+            }}
+            aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+            title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+          >
+            {sidebarOpen ? "Close menu" : "Open menu"}
+          </button>
+        ) : <span />}
+
+        {showChatToggle ? (
+          <button
+            type="button"
+            className="pal-chat-toggle"
+            onClick={toggleChatPanel}
+            aria-label={chatPanelOpen ? "Close chat" : "Open chat"}
+            title={chatPanelOpen ? "Close chat" : "Open chat"}
+          >
+            {chatPanelOpen ? "Close chat" : "Open chat"}
+          </button>
+        ) : null}
 
         <section className="pal-mode-picker" aria-label="Conversation mode picker">
           <button
