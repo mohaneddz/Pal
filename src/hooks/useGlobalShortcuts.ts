@@ -32,15 +32,6 @@ interface UseGlobalShortcutsParams {
 
 const PAGE_ORDER: PageId[] = ["home", "history", "stats", "settings", "about"];
 
-function isEditableElement(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  const tag = target.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
-}
-
 export function useGlobalShortcuts({
   activePage,
   setActivePage,
@@ -71,10 +62,10 @@ export function useGlobalShortcuts({
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
+      const code = event.code;
       const mod = event.ctrlKey || event.metaKey;
       const alt = event.altKey;
       const shift = event.shiftKey;
-      const editable = isEditableElement(event.target);
 
       if (event.key === "Escape") {
         setChatMenuOpen(false);
@@ -156,37 +147,25 @@ export function useGlobalShortcuts({
         return;
       }
 
-      if (!shift && key === "b" && !heroOnlyMode) {
+      if (!shift && code === "Backslash" && !heroOnlyMode) {
         event.preventDefault();
         setSidebarOpen(!sidebarOpen);
         return;
       }
 
-      if (shift && key === "j" && !heroOnlyMode) {
+      if (shift && code === "Backslash" && !heroOnlyMode) {
         event.preventDefault();
         setChatPanelOpen(!chatPanelOpen);
         return;
       }
 
-      if (shift && key === "v") {
+      if (!shift && code === "Space") {
         event.preventDefault();
-        if (!isProcessing && !voiceEnabled) {
+        if (!isProcessing || voiceEnabled) {
+          const willEnable = !voiceEnabled;
           void toggleListening();
-          setComposerNotice("Voice chat started.");
+          setComposerNotice(willEnable ? "Voice chat started." : "Voice chat stopped.");
         }
-        return;
-      }
-
-      if (shift && key === "x") {
-        event.preventDefault();
-        if (voiceEnabled) {
-          void toggleListening();
-          setComposerNotice("Voice chat stopped.");
-        }
-        return;
-      }
-
-      if (editable && key !== "enter") {
         return;
       }
 
@@ -251,7 +230,7 @@ export function useGlobalShortcuts({
 
       if (shift && key === "?") {
         event.preventDefault();
-        setComposerNotice("Shortcuts: Alt+1..5 pages, Ctrl/Cmd+B sidebar, Ctrl/Cmd+Shift+J chat panel, Ctrl/Cmd+/ composer, Ctrl/Cmd+Enter send, Ctrl/Cmd+K search, Ctrl/Cmd+Shift+V start voice, Ctrl/Cmd+Shift+X stop voice, Ctrl/Cmd+Shift+N new chat, Ctrl/Cmd+Shift+R reuse, Ctrl/Cmd+Shift+A attach, Ctrl/Cmd+Shift+C copy last, Ctrl/Cmd+Shift+E export, Ctrl/Cmd+Shift+M minimize/tray, Ctrl/Cmd+. stop speech, desktop-global Ctrl/Cmd+Shift+B focus Pal.");
+        setComposerNotice("Shortcuts: Alt+1..5 pages, Ctrl/Cmd+\\ sidebar, Ctrl/Cmd+Shift+\\ chat panel, Ctrl/Cmd+Space voice toggle, Ctrl/Cmd+/ composer, Ctrl/Cmd+Enter send, Ctrl/Cmd+K search, Ctrl/Cmd+Shift+N new chat, Ctrl/Cmd+Shift+R reuse, Ctrl/Cmd+Shift+A attach, Ctrl/Cmd+Shift+C copy last, Ctrl/Cmd+Shift+E export, Ctrl/Cmd+Shift+M minimize (desktop-global restore to Home), Ctrl/Cmd+. stop speech, desktop-global Ctrl/Cmd+Shift+B focus composer.");
       }
     };
 

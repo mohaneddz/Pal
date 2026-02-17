@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  disable as disableAutostart,
+  enable as enableAutostart,
+  isEnabled as isAutostartEnabled,
+} from "@tauri-apps/plugin-autostart";
 import { load, type Store } from "@tauri-apps/plugin-store";
 
 import { hasGroqKey, ONLINE_FEATURES_ENABLED, runtimeConfig } from "../config/runtime";
@@ -33,12 +38,17 @@ const DEFAULT_SETTINGS: PalUiSettings = {
   assistantMode: "advisor",
   autoSpeak: true,
   minimizeToTray: false,
+  startWithWindows: false,
+  startMinimized: false,
 };
 
 const SPEAKING_STATUSES: AssistantStatus[] = ["processing", "speaking"];
 const SPEECH_START_THRESHOLD = 0.09;
 const SILENCE_THRESHOLD = 0.045;
 const SILENCE_DURATION_MS = 1400;
+const SPEECH_START_HOLD_MS = 220;
+const MIN_SPEECH_DURATION_MS = 280;
+const MIN_SPEECH_PEAK_LEVEL = 0.12;
 
 function generateMessageId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -113,12 +123,23 @@ function sanitizeSettings(value: unknown): PalUiSettings {
     ? parsed.assistantMode
     : DEFAULT_SETTINGS.assistantMode;
 
+  const startWithWindows = typeof parsed.startWithWindows === "boolean"
+    ? parsed.startWithWindows
+    : DEFAULT_SETTINGS.startWithWindows;
+  const startMinimized = startWithWindows && typeof parsed.startMinimized === "boolean"
+    ? parsed.startMinimized
+    : false;
+
   return {
     voice,
     speechStyle,
     assistantMode,
-    autoSpeak: parsed.autoSpeak ?? DEFAULT_SETTINGS.autoSpeak,
-    minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
+    autoSpeak: typeof parsed.autoSpeak === "boolean" ? parsed.autoSpeak : DEFAULT_SETTINGS.autoSpeak,
+    minimizeToTray: typeof parsed.minimizeToTray === "boolean"
+      ? parsed.minimizeToTray
+      : DEFAULT_SETTINGS.minimizeToTray,
+    startWithWindows,
+    startMinimized,
   };
 }
 
@@ -314,10 +335,12 @@ export interface UsePalAssistantResult {
   updateAssistantMode: (mode: string) => void;
   setAutoSpeak: (enabled: boolean) => void;
   setMinimizeToTray: (enabled: boolean) => void;
+  setStartWithWindows: (enabled: boolean) => void;
+  setStartMinimized: (enabled: boolean) => void;
 }
 
 export function usePalAssistant(): UsePalAssistantResult {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadFallbackMessages());
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>(() => loadFallbackMessages());
   const [settings, setSettings] = useState<PalUiSettings>(() => loadFallbackSettings());
   const [status, setStatus] = useState<AssistantStatus>("idle");
@@ -338,12 +361,17 @@ export function usePalAssistant(): UsePalAssistantResult {
   const settingsRef = useRef(settings);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingSessionRef = useRef(0);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterFrameRef = useRef<number | null>(null);
   const speechDetectedRef = useRef(false);
+  const speechStartHoldMsRef = useRef(0);
+  const speechDurationMsRef = useRef(0);
+  const speechPeakLevelRef = useRef(0);
+  const lastMeterTickMsRef = useRef<number | null>(null);
   const silenceStartMsRef = useRef<number | null>(null);
   const autoStopInFlightRef = useRef(false);
 
@@ -437,16 +465,27 @@ export function usePalAssistant(): UsePalAssistantResult {
         const persistedHistory = sanitizeMessages(storedHistory);
         const persistedHistoryOrCurrent = persistedHistory.length > 0 ? persistedHistory : persistedCurrent;
 
-        const mergedCurrent = mergeUniqueMessages(persistedCurrent, messagesRef.current);
+        const mergedCurrent: ChatMessage[] = [];
         const mergedHistoryBase = historyMessagesRef.current.length > 0
           ? historyMessagesRef.current
-          : mergedCurrent;
+          : persistedCurrent;
         const mergedHistory = mergeUniqueMessages(persistedHistoryOrCurrent, mergedHistoryBase);
-        const hydratedSettings = settingsTouchedRef.current
+        const baseHydratedSettings = settingsTouchedRef.current
           ? settingsRef.current
           : storedSettings
             ? sanitizeSettings(storedSettings)
             : settingsRef.current;
+        let hydratedSettings = baseHydratedSettings;
+        try {
+          const autostartEnabled = await isAutostartEnabled();
+          hydratedSettings = {
+            ...baseHydratedSettings,
+            startWithWindows: autostartEnabled,
+            startMinimized: autostartEnabled ? baseHydratedSettings.startMinimized : false,
+          };
+        } catch {
+          // Ignore plugin availability failures in non-tauri contexts.
+        }
         const hydratedApiUsage = sanitizeApiUsage(storedApiUsage);
 
         messagesRef.current = mergedCurrent;
@@ -503,6 +542,10 @@ export function usePalAssistant(): UsePalAssistantResult {
 
   const resetSilenceDetection = useCallback(() => {
     speechDetectedRef.current = false;
+    speechStartHoldMsRef.current = 0;
+    speechDurationMsRef.current = 0;
+    speechPeakLevelRef.current = 0;
+    lastMeterTickMsRef.current = null;
     silenceStartMsRef.current = null;
     autoStopInFlightRef.current = false;
   }, []);
@@ -568,6 +611,12 @@ export function usePalAssistant(): UsePalAssistantResult {
         return;
       }
 
+      const now = performance.now();
+      const deltaMs = lastMeterTickMsRef.current === null
+        ? 16
+        : Math.min(100, now - lastMeterTickMsRef.current);
+      lastMeterTickMsRef.current = now;
+
       meter.getByteTimeDomainData(samples);
       let sumSquares = 0;
       for (let index = 0; index < samples.length; index += 1) {
@@ -581,18 +630,30 @@ export function usePalAssistant(): UsePalAssistantResult {
 
       if (!autoStopInFlightRef.current && onSilenceDetected) {
         if (normalizedLevel >= SPEECH_START_THRESHOLD) {
+          speechStartHoldMsRef.current += deltaMs;
+          speechPeakLevelRef.current = Math.max(speechPeakLevelRef.current, normalizedLevel);
+        } else {
+          speechStartHoldMsRef.current = 0;
+        }
+
+        if (!speechDetectedRef.current && speechStartHoldMsRef.current >= SPEECH_START_HOLD_MS) {
           speechDetectedRef.current = true;
           silenceStartMsRef.current = null;
-        } else if (speechDetectedRef.current && normalizedLevel <= SILENCE_THRESHOLD) {
-          const now = performance.now();
-          if (silenceStartMsRef.current === null) {
-            silenceStartMsRef.current = now;
-          } else if (now - silenceStartMsRef.current >= SILENCE_DURATION_MS) {
-            autoStopInFlightRef.current = true;
-            onSilenceDetected();
+        }
+
+        if (speechDetectedRef.current) {
+          if (normalizedLevel >= SILENCE_THRESHOLD) {
+            speechDurationMsRef.current += deltaMs;
+            speechPeakLevelRef.current = Math.max(speechPeakLevelRef.current, normalizedLevel);
+            silenceStartMsRef.current = null;
+          } else if (normalizedLevel <= SILENCE_THRESHOLD) {
+            if (silenceStartMsRef.current === null) {
+              silenceStartMsRef.current = now;
+            } else if (now - silenceStartMsRef.current >= SILENCE_DURATION_MS) {
+              autoStopInFlightRef.current = true;
+              onSilenceDetected();
+            }
           }
-        } else {
-          silenceStartMsRef.current = null;
         }
       }
 
@@ -1064,11 +1125,16 @@ export function usePalAssistant(): UsePalAssistantResult {
     }
 
     setStatus("processing");
+    const recorderSessionId = recordingSessionRef.current;
 
     const recordingBlob = await new Promise<Blob>((resolve, reject) => {
       const handleStop = () => {
         cleanup();
         const type = recorder.mimeType || "audio/webm";
+        if (recorderSessionId !== recordingSessionRef.current) {
+          resolve(new Blob([], { type }));
+          return;
+        }
         resolve(new Blob(recordedChunksRef.current, { type }));
       };
 
@@ -1088,6 +1154,10 @@ export function usePalAssistant(): UsePalAssistantResult {
     });
 
     mediaRecorderRef.current = null;
+    recordedChunksRef.current = [];
+    const speechDetected = speechDetectedRef.current;
+    const speechDurationMs = speechDurationMsRef.current;
+    const speechPeakLevel = speechPeakLevelRef.current;
     stopMeter();
     stopRecordingStream();
     setAudioLevel(0);
@@ -1099,6 +1169,18 @@ export function usePalAssistant(): UsePalAssistantResult {
     }
 
     if (!recordingBlob.size) {
+      setStatus("idle");
+      if (resumeAfterTurn && voiceLoopEnabledRef.current) {
+        pendingResumeListeningRef.current = true;
+      }
+      return;
+    }
+
+    const hasValidSpeech = speechDetected
+      && speechDurationMs >= MIN_SPEECH_DURATION_MS
+      && speechPeakLevel >= MIN_SPEECH_PEAK_LEVEL;
+
+    if (!hasValidSpeech) {
       setStatus("idle");
       if (resumeAfterTurn && voiceLoopEnabledRef.current) {
         pendingResumeListeningRef.current = true;
@@ -1170,6 +1252,9 @@ export function usePalAssistant(): UsePalAssistantResult {
     setErrorMessage(null);
     resetSilenceDetection();
 
+    const sessionId = recordingSessionRef.current + 1;
+    recordingSessionRef.current = sessionId;
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaStreamRef.current = stream;
     recordedChunksRef.current = [];
@@ -1185,6 +1270,9 @@ export function usePalAssistant(): UsePalAssistantResult {
       : new MediaRecorder(stream);
 
     recorder.addEventListener("dataavailable", (event) => {
+      if (sessionId !== recordingSessionRef.current) {
+        return;
+      }
       if (event.data.size > 0) {
         recordedChunksRef.current.push(event.data);
       }
@@ -1289,11 +1377,30 @@ export function usePalAssistant(): UsePalAssistantResult {
   );
 
   const clearConversation = useCallback(() => {
+    voiceLoopEnabledRef.current = false;
+    setVoiceLoopEnabled(false);
+    recordingSessionRef.current += 1;
+
     if (browserRecognitionRef.current) {
       browserRecognitionCancelledRef.current = true;
       browserRecognitionRef.current.stop();
       browserRecognitionRef.current = null;
     }
+
+    const recorder = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {
+        // Ignore recorder stop races during cleanup.
+      }
+    }
+
+    recordedChunksRef.current = [];
+    stopMeter();
+    stopRecordingStream();
+    resetSilenceDetection();
     stopSpeaking();
     clearAllTimers();
     pendingResumeListeningRef.current = false;
@@ -1304,7 +1411,15 @@ export function usePalAssistant(): UsePalAssistantResult {
     setErrorMessage(null);
     setStatus("idle");
     void persistStateSnapshot([], historyMessagesRef.current, settings);
-  }, [clearAllTimers, persistStateSnapshot, settings, stopSpeaking]);
+  }, [
+    clearAllTimers,
+    persistStateSnapshot,
+    resetSilenceDetection,
+    settings,
+    stopMeter,
+    stopRecordingStream,
+    stopSpeaking,
+  ]);
 
   useEffect(() => {
     if (!voiceLoopEnabled || pendingResumeListeningRef.current === false) {
@@ -1359,6 +1474,33 @@ export function usePalAssistant(): UsePalAssistantResult {
     updateSettings((previous) => ({ ...previous, minimizeToTray: enabled }));
   }, [updateSettings]);
 
+  const setStartWithWindows = useCallback((enabled: boolean) => {
+    void (async () => {
+      try {
+        if (enabled) {
+          await enableAutostart();
+        } else {
+          await disableAutostart();
+        }
+      } catch {
+        return;
+      }
+
+      updateSettings((previous) => ({
+        ...previous,
+        startWithWindows: enabled,
+        startMinimized: enabled ? previous.startMinimized : false,
+      }));
+    })();
+  }, [updateSettings]);
+
+  const setStartMinimized = useCallback((enabled: boolean) => {
+    updateSettings((previous) => ({
+      ...previous,
+      startMinimized: previous.startWithWindows ? enabled : false,
+    }));
+  }, [updateSettings]);
+
   useEffect(
     () => () => {
       if (browserRecognitionRef.current) {
@@ -1366,6 +1508,8 @@ export function usePalAssistant(): UsePalAssistantResult {
         browserRecognitionRef.current.stop();
         browserRecognitionRef.current = null;
       }
+      recordingSessionRef.current += 1;
+      recordedChunksRef.current = [];
       clearAllTimers();
       stopMeter();
       stopRecordingStream();
@@ -1400,6 +1544,8 @@ export function usePalAssistant(): UsePalAssistantResult {
       updateAssistantMode,
       setAutoSpeak,
       setMinimizeToTray,
+      setStartWithWindows,
+      setStartMinimized,
     }),
     [
       messages,
@@ -1422,6 +1568,8 @@ export function usePalAssistant(): UsePalAssistantResult {
       updateAssistantMode,
       setAutoSpeak,
       setMinimizeToTray,
+      setStartWithWindows,
+      setStartMinimized,
     ],
   );
 

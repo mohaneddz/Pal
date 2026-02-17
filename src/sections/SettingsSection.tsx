@@ -13,6 +13,8 @@ interface SettingsSectionProps {
   setRuntimeModelsState: (value: RuntimeModels) => void;
   setAutoSpeak: (enabled: boolean) => void;
   setMinimizeToTray: (enabled: boolean) => void;
+  setStartWithWindows: (enabled: boolean) => void;
+  setStartMinimized: (enabled: boolean) => void;
 }
 
 export function SettingsSection({
@@ -27,6 +29,8 @@ export function SettingsSection({
   setRuntimeModelsState,
   setAutoSpeak,
   setMinimizeToTray,
+  setStartWithWindows,
+  setStartMinimized,
 }: SettingsSectionProps) {
   const LOCAL_RUNTIME_DISABLED_HINT = "Local runtime is disabled in this build.";
 
@@ -220,6 +224,38 @@ export function SettingsSection({
               <span className="pal-switch-slider" aria-hidden="true" />
             </label>
           </div>
+          <div className="pal-setting-switch">
+            <label htmlFor="start-with-windows">Start with Windows</label>
+            <label className="pal-switch-control" htmlFor="start-with-windows">
+              <input
+                id="start-with-windows"
+                type="checkbox"
+                checked={settings.startWithWindows}
+                onChange={(event) => {
+                  setStartWithWindows(event.target.checked);
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <div className="pal-setting-switch">
+            <label htmlFor="start-minimized">Start minimized</label>
+            <label className="pal-switch-control" htmlFor="start-minimized">
+              <input
+                id="start-minimized"
+                type="checkbox"
+                checked={settings.startMinimized}
+                disabled={!settings.startWithWindows}
+                onChange={(event) => {
+                  setStartMinimized(event.target.checked);
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <p className="pal-setting-hint">
+            Start minimized is available only when Start with Windows is enabled.
+          </p>
           <div className="pal-setting-switch">
             <label htmlFor="minimize-to-tray">Minimize to tray</label>
             <label className="pal-switch-control" htmlFor="minimize-to-tray">

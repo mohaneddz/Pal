@@ -164,18 +164,10 @@ export function Titlebar({
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      const mod = event.ctrlKey || event.metaKey;
-      const shift = event.shiftKey;
 
       if (key === "f11") {
         event.preventDefault();
         void handleFullscreenToggle();
-        return;
-      }
-
-      if (mod && shift && key === "m") {
-        event.preventDefault();
-        void handleMinimize();
       }
     };
 
@@ -184,7 +176,7 @@ export function Titlebar({
     return () => {
       window.removeEventListener("keydown", handleKeydown, { capture: true });
     };
-  }, [handleFullscreenToggle, handleMinimize]);
+  }, [handleFullscreenToggle]);
 
   return (
     <header
