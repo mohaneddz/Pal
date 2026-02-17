@@ -27,3 +27,5 @@ src/App.tsx
 backend/weights/**
 backend/voice/**
 backend/**.wav
+
+src/.env
