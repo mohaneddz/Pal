@@ -15,6 +15,10 @@ export function StatsSection({
   currentAssistantMode,
   modeLabelById,
 }: StatsSectionProps) {
+  const assistantShare = conversationStats.totalWords > 0
+    ? Math.round((conversationStats.assistantWordCount / conversationStats.totalWords) * 100)
+    : 0;
+
   return (
     <section className="pal-stats-panel">
       <header className="pal-page-header">
@@ -44,16 +48,16 @@ export function StatsSection({
           <strong>{conversationStats.totalCharacters}</strong>
         </article>
         <article className="pal-stat-card">
-          <span>Active thread messages</span>
-          <strong>{conversationStats.activeConversationMessages}</strong>
+          <span>Active days</span>
+          <strong>{conversationStats.activeDays}</strong>
+        </article>
+        <article className="pal-stat-card">
+          <span>Messages per active day</span>
+          <strong>{conversationStats.messagesPerActiveDay}</strong>
         </article>
         <article className="pal-stat-card">
           <span>API requests (total)</span>
           <strong>{apiUsage.totalRequests}</strong>
-        </article>
-        <article className="pal-stat-card">
-          <span>API failed requests</span>
-          <strong>{apiUsage.failedRequests}</strong>
         </article>
       </div>
 
@@ -79,24 +83,32 @@ export function StatsSection({
           <strong>{modeLabelById[currentAssistantMode] ?? "Advisor"}</strong>
         </div>
         <div className="pal-stat-row">
-          <span>User words vs assistant words</span>
+          <span>User words / assistant words</span>
           <strong>{conversationStats.userWordCount} / {conversationStats.assistantWordCount}</strong>
+        </div>
+        <div className="pal-stat-row">
+          <span>Assistant word share</span>
+          <strong>{assistantShare}%</strong>
+        </div>
+        <div className="pal-stat-row">
+          <span>Average user message length</span>
+          <strong>{conversationStats.averageUserWordsPerMessage} words</strong>
+        </div>
+        <div className="pal-stat-row">
+          <span>Average assistant message length</span>
+          <strong>{conversationStats.averageAssistantWordsPerMessage} words</strong>
+        </div>
+        <div className="pal-stat-row">
+          <span>Longest message</span>
+          <strong>
+            {conversationStats.longestMessageWords > 0
+              ? `${conversationStats.longestMessageWords} words (${conversationStats.longestMessageRole === "user" ? "You" : "Assistant"})`
+              : "No messages yet"}
+          </strong>
         </div>
         <div className="pal-stat-row">
           <span>API calls by type (chat / STT / TTS)</span>
           <strong>{apiUsage.chatRequests} / {apiUsage.transcriptionRequests} / {apiUsage.speechRequests}</strong>
-        </div>
-        <div className="pal-stat-row">
-          <span>Quota requests remaining</span>
-          <strong>{apiUsage.quota?.remainingRequests ?? "Not exposed"}</strong>
-        </div>
-        <div className="pal-stat-row">
-          <span>Quota token remaining</span>
-          <strong>{apiUsage.quota?.remainingTokens ?? "Not exposed"}</strong>
-        </div>
-        <div className="pal-stat-row">
-          <span>Quota snapshot updated</span>
-          <strong>{apiUsage.quota?.updatedAt ? formatDateTime(apiUsage.quota.updatedAt) : "Not available"}</strong>
         </div>
       </div>
     </section>
