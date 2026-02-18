@@ -12,6 +12,12 @@ export interface ConversationStats {
   averageCharactersPerMessage: number;
   userWordCount: number;
   assistantWordCount: number;
+  averageUserWordsPerMessage: number;
+  averageAssistantWordsPerMessage: number;
+  messagesPerActiveDay: number;
+  activeDays: number;
+  longestMessageWords: number;
+  longestMessageRole: "user" | "assistant" | null;
   activeConversationMessages: number;
   firstMessageAt: number | null;
   latestMessageAt: number | null;
@@ -147,6 +153,24 @@ export function buildConversationStats(
   const firstMessageAt = historyMessages.length > 0 ? historyMessages[0].createdAt : null;
   const userWordCount = userMessages.reduce((total, message) => total + wordCount(message.content), 0);
   const assistantWordCount = assistantMessages.reduce((total, message) => total + wordCount(message.content), 0);
+  const averageUserWordsPerMessage = userMessages.length > 0 ? Math.round(userWordCount / userMessages.length) : 0;
+  const averageAssistantWordsPerMessage = assistantMessages.length > 0
+    ? Math.round(assistantWordCount / assistantMessages.length)
+    : 0;
+
+  const uniqueDays = new Set(historyMessages.map((message) => new Date(message.createdAt).toDateString()));
+  const activeDays = uniqueDays.size;
+  const messagesPerActiveDay = activeDays > 0 ? Math.round((historyMessages.length / activeDays) * 10) / 10 : 0;
+
+  let longestMessageWords = 0;
+  let longestMessageRole: "user" | "assistant" | null = null;
+  for (const message of historyMessages) {
+    const count = wordCount(message.content);
+    if (count > longestMessageWords) {
+      longestMessageWords = count;
+      longestMessageRole = message.role;
+    }
+  }
 
   return {
     totalMessages: historyMessages.length,
@@ -158,6 +182,12 @@ export function buildConversationStats(
     averageCharactersPerMessage,
     userWordCount,
     assistantWordCount,
+    averageUserWordsPerMessage,
+    averageAssistantWordsPerMessage,
+    messagesPerActiveDay,
+    activeDays,
+    longestMessageWords,
+    longestMessageRole,
     activeConversationMessages,
     firstMessageAt,
     latestMessageAt,
