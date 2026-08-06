@@ -1,4 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod llm;
+
 use serde_json::Value;
 use std::fs;
 use std::sync::Mutex;
@@ -130,6 +132,7 @@ fn destroy_main_window(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .manage(llm::LlmState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
@@ -143,7 +146,12 @@ pub fn run() {
             Some(vec![AUTOSTART_ARG]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            llm::local_llm_start,
+            llm::local_llm_stop,
+            llm::local_llm_status,
+        ])
         .setup(|app| {
             if should_start_minimized(app.handle()) {
                 if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
@@ -307,11 +315,15 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if let RunEvent::ExitRequested { api, .. } = event {
+        .run(|app, event| match event {
+            RunEvent::ExitRequested { api, .. } => {
                 if should_prevent_exit(app) {
                     api.prevent_exit();
                 }
             }
+            // Windows does not reap child processes with the parent, so the
+            // llama-server would otherwise keep holding VRAM after Pal quits.
+            RunEvent::Exit => llm::shutdown(app),
+            _ => {}
         });
 }
