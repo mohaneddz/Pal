@@ -2,6 +2,7 @@
 mod llm;
 mod server;
 mod stt;
+mod tts;
 
 use serde_json::Value;
 use std::fs;
@@ -136,6 +137,7 @@ pub fn run() {
         .manage(AppState::default())
         .manage(llm::LlmState::default())
         .manage(stt::SttState::default())
+        .manage(tts::TtsState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
@@ -157,6 +159,7 @@ pub fn run() {
             stt::local_stt_start,
             stt::local_stt_stop,
             stt::local_stt_status,
+            tts::local_tts_synthesize,
         ])
         .setup(|app| {
             if should_start_minimized(app.handle()) {
