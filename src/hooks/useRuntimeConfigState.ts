@@ -1,15 +1,33 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { ONLINE_FEATURES_ENABLED, runtimeConfig } from "../config/runtime";
-import type { RuntimeToggles } from "../types/pal";
+import { runtimeConfig } from "../config/runtime";
+import type { LocalLlmModel, RuntimeToggles } from "../types/pal";
 
 const RUNTIME_TOGGLES_STORAGE_KEY = "pal.runtime.toggles.v1";
 const RUNTIME_MODELS_STORAGE_KEY = "pal.runtime.models.v1";
+const RUNTIME_LOCAL_STORAGE_KEY = "pal.runtime.local.v1";
 
 const DEFAULT_TOGGLES: RuntimeToggles = {
   LOCAL_LLM: false,
   STT_LOCAL: false,
   TTS_LOCAL: false,
+};
+
+/** The subset of `LocalConfig` exposed as a Settings control. Context size and
+ * thread count stay fixed — they're tuning knobs, not something most users
+ * benefit from touching, and raw number inputs there just invite footguns
+ * (a 0-thread or 0-context value with no validation). */
+export interface LocalModelPreferences {
+  llmModel: LocalLlmModel;
+  /** `true` offloads all layers to GPU (`-ngl 99`); `false` forces CPU (`-ngl 0`). */
+  useGpu: boolean;
+  ttsSpeed: number;
+}
+
+const DEFAULT_LOCAL_PREFS: LocalModelPreferences = {
+  llmModel: "gemma-3-4b-it-q4_0",
+  useGpu: true,
+  ttsSpeed: 1.0,
 };
 
 function readBool(source: Record<string, unknown>, key: keyof RuntimeToggles): boolean {
@@ -51,18 +69,52 @@ function loadRuntimeModels() {
   }
 }
 
+function loadLocalPreferences(): LocalModelPreferences {
+  const fallback: LocalModelPreferences = {
+    ...DEFAULT_LOCAL_PREFS,
+    llmModel: runtimeConfig.local.llmModel,
+    useGpu: runtimeConfig.local.gpuLayers > 0,
+    ttsSpeed: runtimeConfig.local.ttsSpeed,
+  };
+  try {
+    const raw = localStorage.getItem(RUNTIME_LOCAL_STORAGE_KEY);
+    if (!raw) {
+      return fallback;
+    }
+    const parsed = JSON.parse(raw) as Partial<LocalModelPreferences>;
+    return {
+      llmModel: parsed.llmModel === "gemma-3-1b-it-q4_0" ? "gemma-3-1b-it-q4_0" : fallback.llmModel,
+      useGpu: typeof parsed.useGpu === "boolean" ? parsed.useGpu : fallback.useGpu,
+      ttsSpeed:
+        typeof parsed.ttsSpeed === "number" && Number.isFinite(parsed.ttsSpeed)
+          ? Math.min(1.5, Math.max(0.75, parsed.ttsSpeed))
+          : fallback.ttsSpeed,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 // Keep the module-level singleton in sync before first paint, so any consumer
-// reading `runtimeConfig.toggles` during the initial render sees stored values.
+// reading `runtimeConfig` during the initial render sees stored values.
 const initialToggles = loadRuntimeToggles();
 runtimeConfig.toggles.LOCAL_LLM = initialToggles.LOCAL_LLM;
 runtimeConfig.toggles.STT_LOCAL = initialToggles.STT_LOCAL;
 runtimeConfig.toggles.TTS_LOCAL = initialToggles.TTS_LOCAL;
+
+const initialLocalPrefs = loadLocalPreferences();
+runtimeConfig.local.llmModel = initialLocalPrefs.llmModel;
+runtimeConfig.local.gpuLayers = initialLocalPrefs.useGpu ? 99 : 0;
+runtimeConfig.local.ttsSpeed = initialLocalPrefs.ttsSpeed;
 
 export function useRuntimeConfigState() {
   const [runtimeTogglesState, setRuntimeTogglesState] = useState<RuntimeToggles>(() => ({
     ...initialToggles,
   }));
   const [runtimeModelsState, setRuntimeModelsState] = useState(() => loadRuntimeModels());
+  const [localPreferences, setLocalPreferences] = useState<LocalModelPreferences>(
+    () => initialLocalPrefs,
+  );
 
   useEffect(() => {
     runtimeConfig.toggles.LOCAL_LLM = runtimeTogglesState.LOCAL_LLM;
@@ -86,32 +138,23 @@ export function useRuntimeConfigState() {
     }
   }, [runtimeModelsState]);
 
-  // "local" only when every stage runs on-device; any cloud stage makes it a hybrid,
-  // which the UI still labels "cloud" so the user knows requests can leave the machine.
-  const runtimeMode: "local" | "cloud" = runtimeTogglesState.LOCAL_LLM
-    && runtimeTogglesState.STT_LOCAL
-    && runtimeTogglesState.TTS_LOCAL
-    ? "local"
-    : "cloud";
-
-  const handleRuntimeModeChange = useCallback((mode: "cloud" | "local") => {
-    if (!ONLINE_FEATURES_ENABLED && mode === "cloud") {
-      return;
+  useEffect(() => {
+    runtimeConfig.local.llmModel = localPreferences.llmModel;
+    runtimeConfig.local.gpuLayers = localPreferences.useGpu ? 99 : 0;
+    runtimeConfig.local.ttsSpeed = localPreferences.ttsSpeed;
+    try {
+      localStorage.setItem(RUNTIME_LOCAL_STORAGE_KEY, JSON.stringify(localPreferences));
+    } catch {
+      // Ignore storage errors in restricted environments.
     }
-    const enabled = mode === "local";
-    setRuntimeTogglesState({
-      LOCAL_LLM: enabled,
-      STT_LOCAL: enabled,
-      TTS_LOCAL: enabled,
-    });
-  }, []);
+  }, [localPreferences]);
 
   return {
     runtimeTogglesState,
     setRuntimeTogglesState,
     runtimeModelsState,
     setRuntimeModelsState,
-    runtimeMode,
-    handleRuntimeModeChange,
+    localPreferences,
+    setLocalPreferences,
   };
 }
