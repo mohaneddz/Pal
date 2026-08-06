@@ -24,8 +24,12 @@ dist-ssr
 *.sw?
 src/App.tsx
 
+# Local inference payloads: large prebuilt binaries and model weights, fetched
+# by scripts/fetch-backend.ps1 rather than tracked here.
 backend/weights/**
 backend/voice/**
+backend/lib/*.dll
+backend/lib/*.exe
 backend/**.wav
 
 src/.env
