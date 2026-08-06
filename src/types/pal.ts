@@ -65,7 +65,11 @@ export type LocalServerState = "stopped" | "starting" | "ready" | "error";
 
 export interface LocalServerStatus {
   state: LocalServerState;
-  model: LocalLlmModel;
+  /** Identifier of whatever this server loaded — a Gemma model id for the LLM
+   * supervisor, a Whisper model stem for the STT supervisor. Not narrowed to
+   * `LocalLlmModel` because the Rust side (`server.rs`) shares one status
+   * shape across both. */
+  model: string;
   port: number;
   /** Populated only when `state` is "error". */
   message?: string;

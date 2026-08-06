@@ -1188,6 +1188,18 @@ html.pal-window-fullscreen .pal-frame {
   color: rgba(255, 222, 222, 0.96);
 }
 
+.pal-system-alert-success {
+  border-color: rgba(110, 235, 180, 0.42);
+  background: rgba(20, 79, 61, 0.4);
+  color: rgba(210, 255, 236, 0.95);
+}
+
+.pal-system-alert-compact {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  margin-top: 6px;
+}
+
 .pal-chat-placeholder {
   border: 1px dashed rgba(118, 160, 255, 0.34);
   border-radius: 16px;
@@ -1940,6 +1952,26 @@ html.pal-window-fullscreen .pal-frame {
   color: rgba(170, 195, 235, 0.78);
   font-size: 0.8rem;
   line-height: 1.45;
+}
+
+.pal-setting-row input[type="range"] {
+  accent-color: rgba(126, 178, 255, 0.9);
+  width: 100%;
+  height: 20px;
+}
+
+.pal-setting-row-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: rgba(194, 213, 246, 0.86);
+}
+
+.pal-setting-row-value span:last-child {
+  font-variant-numeric: tabular-nums;
+  color: rgba(147, 234, 255, 0.92);
 }
 
 @keyframes pal-wave {

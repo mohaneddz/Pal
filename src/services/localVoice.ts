@@ -29,6 +29,10 @@ export async function stopLocalStt(): Promise<LocalServerStatus> {
   return invoke<LocalServerStatus>("local_stt_stop");
 }
 
+export async function getLocalSttStatus(): Promise<LocalServerStatus> {
+  return invoke<LocalServerStatus>("local_stt_status");
+}
+
 /**
  * Decode whatever container MediaRecorder produced (typically WebM/Opus) and
  * resample it to the mono 16 kHz PCM whisper wants. Doing this with WebAudio
