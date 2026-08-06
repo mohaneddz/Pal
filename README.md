@@ -187,6 +187,11 @@ Measured on an RTX 4070 Laptop (8 GB):
    > Only the `VITE_GROQ_*` values matter for cloud mode; local mode needs no
    > key at all.
 
+   > The packaged app's CSP (`src-tauri/tauri.conf.json`) only allows network
+   > requests to `127.0.0.1:*` and `api.groq.com`. Pointing `VITE_GROQ_BASE_URL`
+   > at a different host requires widening `connect-src` there too, or cloud
+   > requests will be silently blocked.
+
 5. **Run in development:**
    ```sh
    pnpm tauri dev
