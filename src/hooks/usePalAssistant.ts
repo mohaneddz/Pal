@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: PalUiSettings = {
   assistantMode: "advisor",
   autoSpeak: true,
   minimizeToTray: false,
+  autoFreeRam: false,
   startWithWindows: false,
   startMinimized: false,
 };
@@ -138,6 +139,9 @@ function sanitizeSettings(value: unknown): PalUiSettings {
     minimizeToTray: typeof parsed.minimizeToTray === "boolean"
       ? parsed.minimizeToTray
       : DEFAULT_SETTINGS.minimizeToTray,
+    autoFreeRam: typeof parsed.autoFreeRam === "boolean"
+      ? parsed.autoFreeRam
+      : DEFAULT_SETTINGS.autoFreeRam,
     startWithWindows,
     startMinimized,
   };
@@ -335,6 +339,7 @@ export interface UsePalAssistantResult {
   updateAssistantMode: (mode: string) => void;
   setAutoSpeak: (enabled: boolean) => void;
   setMinimizeToTray: (enabled: boolean) => void;
+  setAutoFreeRam: (enabled: boolean) => void;
   setStartWithWindows: (enabled: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
 }
@@ -1474,6 +1479,10 @@ export function usePalAssistant(): UsePalAssistantResult {
     updateSettings((previous) => ({ ...previous, minimizeToTray: enabled }));
   }, [updateSettings]);
 
+  const setAutoFreeRam = useCallback((enabled: boolean) => {
+    updateSettings((previous) => ({ ...previous, autoFreeRam: enabled }));
+  }, [updateSettings]);
+
   const setStartWithWindows = useCallback((enabled: boolean) => {
     void (async () => {
       try {
@@ -1544,6 +1553,7 @@ export function usePalAssistant(): UsePalAssistantResult {
       updateAssistantMode,
       setAutoSpeak,
       setMinimizeToTray,
+      setAutoFreeRam,
       setStartWithWindows,
       setStartMinimized,
     }),
@@ -1568,6 +1578,7 @@ export function usePalAssistant(): UsePalAssistantResult {
       updateAssistantMode,
       setAutoSpeak,
       setMinimizeToTray,
+      setAutoFreeRam,
       setStartWithWindows,
       setStartMinimized,
     ],
