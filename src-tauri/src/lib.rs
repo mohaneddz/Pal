@@ -1,5 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod llm;
+mod server;
+mod stt;
 
 use serde_json::Value;
 use std::fs;
@@ -133,6 +135,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .manage(llm::LlmState::default())
+        .manage(stt::SttState::default())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
@@ -151,6 +154,9 @@ pub fn run() {
             llm::local_llm_start,
             llm::local_llm_stop,
             llm::local_llm_status,
+            stt::local_stt_start,
+            stt::local_stt_stop,
+            stt::local_stt_status,
         ])
         .setup(|app| {
             if should_start_minimized(app.handle()) {
@@ -323,7 +329,10 @@ pub fn run() {
             }
             // Windows does not reap child processes with the parent, so the
             // llama-server would otherwise keep holding VRAM after Pal quits.
-            RunEvent::Exit => llm::shutdown(app),
+            RunEvent::Exit => {
+                llm::shutdown(app);
+                stt::shutdown(app);
+            }
             _ => {}
         });
 }
