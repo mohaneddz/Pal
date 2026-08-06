@@ -34,3 +34,6 @@ backend/whisper/**
 backend/**.wav
 
 src/.env
+
+# TTS assets: Kokoro ONNX model, voice packs, extracted espeak-ng.
+backend/tts/**

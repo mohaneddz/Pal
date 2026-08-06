@@ -77,6 +77,21 @@ $WhisperModel = @{
     Sha256 = '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
 }
 
+# Kokoro-82M TTS. The graph consumes phoneme ids, so espeak-ng ships alongside
+# it for grapheme-to-phoneme; the MSI is extracted, never installed.
+$KokoroModel = @{
+    File   = 'kokoro-v1.0.onnx'
+    Url    = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx'
+    Sha256 = '8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb'
+}
+$KokoroVoicesApi = 'https://huggingface.co/api/models/onnx-community/Kokoro-82M-v1.0-ONNX/tree/main/voices'
+$KokoroVoiceBase = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices'
+$EspeakMsi = @{
+    Name   = 'espeak-ng.msi'
+    Url    = 'https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-ng.msi'
+    Sha256 = '7f673c709ea5dd579d3b5ebb98688cc575328a6ab7438d2bc405b88cedaeafb9'
+}
+
 $Weights = @(
     @{
         File = 'gemma-3-4b-it-q4_0.gguf'
@@ -94,9 +109,12 @@ $LibDir      = Join-Path $BackendDir 'lib'
 $WeightsDir  = Join-Path $BackendDir 'weights'
 $WhisperDir  = Join-Path $BackendDir 'whisper'
 $WhisperMdl  = Join-Path $WhisperDir 'models'
+$TtsDir      = Join-Path $BackendDir 'tts'
+$TtsVoices   = Join-Path $TtsDir 'voices'
+$EspeakDir   = Join-Path $TtsDir 'espeak'
 $CacheDir    = Join-Path $env:TEMP 'pal-backend-cache'
 
-foreach ($dir in @($LibDir, $WeightsDir, $WhisperDir, $WhisperMdl, $CacheDir)) {
+foreach ($dir in @($LibDir, $WeightsDir, $WhisperDir, $WhisperMdl, $TtsDir, $TtsVoices, $EspeakDir, $CacheDir)) {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
 
@@ -203,6 +221,64 @@ if (Test-Path $sttModel) {
         Remove-Item $sttModel -Force
         throw "Checksum mismatch for $($WhisperModel.File)."
     }
+}
+
+Write-Host "`nKokoro TTS" -ForegroundColor Cyan
+
+$kokoroPath = Join-Path $TtsDir $KokoroModel.File
+if (Test-Path $kokoroPath) {
+    Write-Host "  present  $($KokoroModel.File)"
+} else {
+    Write-Host "  fetching $($KokoroModel.File) (~325 MB)"
+    Invoke-WebRequest -Uri $KokoroModel.Url -OutFile $kokoroPath -UseBasicParsing
+    $have = (Get-FileHash -Path $kokoroPath -Algorithm SHA256).Hash
+    if ($have -ne $KokoroModel.Sha256.ToUpperInvariant()) {
+        Remove-Item $kokoroPath -Force
+        throw "Checksum mismatch for $($KokoroModel.File)."
+    }
+}
+
+$voiceNames = (Invoke-WebRequest -Uri $KokoroVoicesApi -UseBasicParsing).Content |
+    ConvertFrom-Json | ForEach-Object { Split-Path $_.path -Leaf }
+$fetched = 0
+foreach ($voice in $voiceNames) {
+    $dest = Join-Path $TtsVoices $voice
+    if (Test-Path $dest) { continue }
+    Invoke-WebRequest -Uri "$KokoroVoiceBase/$voice" -OutFile $dest -UseBasicParsing
+    $fetched++
+}
+Write-Host "  voices: $($voiceNames.Count) total, $fetched newly fetched"
+
+if (Test-Path (Join-Path $EspeakDir 'espeak-ng.exe')) {
+    Write-Host "  present  espeak-ng"
+} else {
+    Write-Host "  fetching espeak-ng (~13 MB)"
+    $msi = Join-Path $CacheDir $EspeakMsi.Name
+    if (-not (Test-Path $msi)) {
+        Invoke-WebRequest -Uri $EspeakMsi.Url -OutFile $msi -UseBasicParsing
+    }
+    $have = (Get-FileHash -Path $msi -Algorithm SHA256).Hash
+    if ($have -ne $EspeakMsi.Sha256.ToUpperInvariant()) {
+        Remove-Item $msi -Force
+        throw "Checksum mismatch for espeak-ng.msi."
+    }
+
+    # Administrative extract: unpacks the payload without installing or
+    # touching system state.
+    $espeakStage = Join-Path $CacheDir 'espeak-extract'
+    if (Test-Path $espeakStage) { Remove-Item $espeakStage -Recurse -Force }
+    $proc = Start-Process msiexec -ArgumentList '/a', "`"$msi`"", '/qn', "TARGETDIR=`"$espeakStage`"" `
+        -Wait -PassThru -NoNewWindow
+    if ($proc.ExitCode -ne 0) {
+        throw "msiexec extraction failed with exit code $($proc.ExitCode)."
+    }
+
+    $espeakSrc = Join-Path $espeakStage 'eSpeak NG'
+    Copy-Item (Join-Path $espeakSrc 'espeak-ng.exe')     -Destination $EspeakDir -Force
+    Copy-Item (Join-Path $espeakSrc 'libespeak-ng.dll')  -Destination $EspeakDir -Force
+    Copy-Item (Join-Path $espeakSrc 'espeak-ng-data')    -Destination $EspeakDir -Recurse -Force
+    Remove-Item $espeakStage -Recurse -Force
+    Write-Host "  extracted espeak-ng"
 }
 
 if ($SkipWeights) {

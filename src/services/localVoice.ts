@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { runtimeConfig } from "../config/runtime";
-import type { LocalServerStatus, SpeechStyle } from "../types/pal";
+import type { LocalServerStatus, SpeechStyle, VoicePersona } from "../types/pal";
 
 /**
  * On-device speech.
@@ -128,6 +128,20 @@ export async function transcribeWithLocal(audioBlob: Blob): Promise<string> {
 }
 
 /**
+ * Pal's personas are cloud-provider voice names, so each maps onto the nearest
+ * Kokoro voice. Keeping the mapping here means the existing voice picker drives
+ * both engines instead of needing a separate local-only control.
+ */
+const KOKORO_VOICES: Record<VoicePersona, string> = {
+  autumn: "af_nova",
+  diana: "bf_emma",
+  hannah: "af_bella",
+  austin: "am_michael",
+  daniel: "bm_daniel",
+  troy: "am_onyx",
+};
+
+/**
  * Kokoro has no notion of the cloud provider's speech styles, so `style` only
  * nudges the delivery rate; timbre comes from the configured voice.
  */
@@ -146,6 +160,7 @@ function speedForStyle(style: SpeechStyle, base: number): number {
 
 export async function synthesizeWithLocal(
   text: string,
+  voice: VoicePersona,
   style: SpeechStyle,
 ): Promise<Blob[]> {
   const trimmed = text.trim();
@@ -156,7 +171,7 @@ export async function synthesizeWithLocal(
   const { ttsVoice, ttsSpeed } = runtimeConfig.local;
   const wav = await invoke<number[]>("local_tts_synthesize", {
     text: trimmed,
-    voice: ttsVoice,
+    voice: KOKORO_VOICES[voice] ?? ttsVoice,
     speed: speedForStyle(style, ttsSpeed),
   });
 
