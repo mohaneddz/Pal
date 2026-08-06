@@ -887,7 +887,11 @@ export function usePalAssistant(): UsePalAssistantResult {
   const synthesizeAndPlay = useCallback(
     async (text: string): Promise<boolean> => {
       if (runtimeConfig.toggles.TTS_LOCAL) {
-        const chunks = await synthesizeWithLocal(text, settingsRef.current.speechStyle);
+        const chunks = await synthesizeWithLocal(
+          text,
+          settingsRef.current.voice,
+          settingsRef.current.speechStyle,
+        );
         await playSpeechChunks(chunks);
         return true;
       }
