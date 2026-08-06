@@ -70,6 +70,7 @@ export interface PalUiSettings {
   assistantMode: AssistantMode;
   autoSpeak: boolean;
   minimizeToTray: boolean;
+  autoFreeRam: boolean;
   startWithWindows: boolean;
   startMinimized: boolean;
 }

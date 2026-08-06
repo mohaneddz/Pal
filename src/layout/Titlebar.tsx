@@ -4,10 +4,12 @@ import "./Titlebar.css";
 
 interface TitlebarProps {
   minimizeToTray?: boolean;
+  autoFreeRam?: boolean;
 }
 
 export function Titlebar({
   minimizeToTray = false,
+  autoFreeRam = false,
 }: TitlebarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -70,14 +72,18 @@ export function Titlebar({
   const handleMinimize = useCallback(async () => {
     try {
       if (minimizeToTray) {
-        await appWindow.hide();
+        if (autoFreeRam) {
+          await appWindow.close();
+        } else {
+          await appWindow.hide();
+        }
       } else {
         await appWindow.minimize();
       }
     } catch (error) {
       console.error("Failed to minimize window:", error);
     }
-  }, [appWindow, minimizeToTray]);
+  }, [appWindow, autoFreeRam, minimizeToTray]);
 
   const handleMaximize = useCallback(async () => {
     try {
@@ -94,14 +100,18 @@ export function Titlebar({
   const handleClose = useCallback(async () => {
     try {
       if (minimizeToTray) {
-        await appWindow.hide();
+        if (autoFreeRam) {
+          await appWindow.close();
+        } else {
+          await appWindow.hide();
+        }
       } else {
         await appWindow.close();
       }
     } catch (error) {
       console.error("Failed to close window:", error);
     }
-  }, [appWindow, minimizeToTray]);
+  }, [appWindow, autoFreeRam, minimizeToTray]);
 
   const handleFullscreenToggle = useCallback(async () => {
     try {

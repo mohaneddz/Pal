@@ -13,6 +13,7 @@ interface SettingsSectionProps {
   setRuntimeModelsState: (value: RuntimeModels) => void;
   setAutoSpeak: (enabled: boolean) => void;
   setMinimizeToTray: (enabled: boolean) => void;
+  setAutoFreeRam: (enabled: boolean) => void;
   setStartWithWindows: (enabled: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
 }
@@ -29,6 +30,7 @@ export function SettingsSection({
   setRuntimeModelsState,
   setAutoSpeak,
   setMinimizeToTray,
+  setAutoFreeRam,
   setStartWithWindows,
   setStartMinimized,
 }: SettingsSectionProps) {
@@ -270,8 +272,25 @@ export function SettingsSection({
               <span className="pal-switch-slider" aria-hidden="true" />
             </label>
           </div>
+          <div className="pal-setting-switch">
+            <label htmlFor="auto-free-ram">Auto free RAM on hide/close</label>
+            <label className="pal-switch-control" htmlFor="auto-free-ram">
+              <input
+                id="auto-free-ram"
+                type="checkbox"
+                checked={settings.autoFreeRam}
+                onChange={(event) => {
+                  setAutoFreeRam(event.target.checked);
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
           <p className="pal-setting-hint">
             When enabled, minimize and close will hide the app to the system tray.
+          </p>
+          <p className="pal-setting-hint">
+            Auto free RAM destroys the main window instead of hiding it, and restores it from tray/shortcuts.
           </p>
         </article>
       </div>

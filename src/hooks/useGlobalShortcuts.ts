@@ -104,32 +104,6 @@ export function useGlobalShortcuts({
         return;
       }
 
-      if (key === "1") {
-        event.preventDefault();
-        setActivePage("home");
-        return;
-      }
-      if (!heroOnlyMode && key === "2") {
-        event.preventDefault();
-        setActivePage("history");
-        return;
-      }
-      if (!heroOnlyMode && key === "3") {
-        event.preventDefault();
-        setActivePage("stats");
-        return;
-      }
-      if (!heroOnlyMode && key === "4") {
-        event.preventDefault();
-        setActivePage("settings");
-        return;
-      }
-      if (!heroOnlyMode && key === "5") {
-        event.preventDefault();
-        setActivePage("about");
-        return;
-      }
-
       if (key === "arrowleft" || key === "arrowright") {
         event.preventDefault();
         const pages = heroOnlyMode ? ["home"] as PageId[] : PAGE_ORDER;
@@ -230,7 +204,7 @@ export function useGlobalShortcuts({
 
       if (shift && key === "?") {
         event.preventDefault();
-        setComposerNotice("Shortcuts: Alt+1..5 pages, Ctrl/Cmd+\\ sidebar, Ctrl/Cmd+Shift+\\ chat panel, Ctrl/Cmd+Space voice toggle, Ctrl/Cmd+/ composer, Ctrl/Cmd+Enter send, Ctrl/Cmd+K search, Ctrl/Cmd+Shift+N new chat, Ctrl/Cmd+Shift+R reuse, Ctrl/Cmd+Shift+A attach, Ctrl/Cmd+Shift+C copy last, Ctrl/Cmd+Shift+E export, Ctrl/Cmd+Shift+M minimize (desktop-global restore to Home), Ctrl/Cmd+. stop speech, desktop-global Ctrl/Cmd+Shift+B focus composer.");
+        setComposerNotice("Shortcuts: Alt+1..5 pages, Ctrl/Cmd+\\ sidebar, Ctrl/Cmd+Shift+\\ chat panel, Ctrl/Cmd+Space voice toggle, Ctrl/Cmd+/ composer, Ctrl/Cmd+Enter send, Ctrl/Cmd+K search, Ctrl/Cmd+Shift+N new chat, Ctrl/Cmd+Shift+R reuse, Ctrl/Cmd+Shift+A attach, Ctrl/Cmd+Shift+C copy last, Ctrl/Cmd+Shift+E export, Ctrl/Cmd+Shift+M minimize (desktop-global restore to Home), Ctrl/Cmd+Shift+D free RAM, Ctrl/Cmd+. stop speech, desktop-global Ctrl/Cmd+Shift+B focus composer.");
       }
     };
 
