@@ -32,7 +32,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$LlamaRelease = 'b10293'
+$LlamaRelease   = 'b10293'
+$WhisperRelease = 'v1.9.2'
 
 $Archives = @(
     @{
@@ -58,6 +59,24 @@ $RuntimeFiles = @(
 # CPU backend variants; ggml picks one at runtime from CPU features.
 $RuntimeGlobs = @('ggml-cpu-*.dll')
 
+# whisper.cpp ships its own ggml build (incompatible with llama.cpp's), so it
+# gets its own folder. Its cudart/cublas are byte-identical to llama.cpp's,
+# though, so those are NOT duplicated -- stt.rs puts backend/lib on the PATH.
+$WhisperArchive = @{
+    Name   = "whisper-cublas-12.4.0-bin-x64.zip"
+    Sha256 = '443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c'
+}
+$WhisperFiles = @(
+    'whisper-server.exe', 'whisper.dll',
+    'ggml.dll', 'ggml-base.dll', 'ggml-cuda.dll',
+    'nvrtc64_120_0.dll', 'nvrtc-builtins64_124.dll'
+)
+$WhisperModel = @{
+    File   = 'ggml-large-v3-turbo-q5_0.bin'
+    Url    = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin'
+    Sha256 = '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
+}
+
 $Weights = @(
     @{
         File = 'gemma-3-4b-it-q4_0.gguf'
@@ -69,18 +88,25 @@ $Weights = @(
     }
 )
 
-$RepoRoot  = Split-Path -Parent $PSScriptRoot
-$BackendDir = Join-Path $RepoRoot 'backend'
-$LibDir     = Join-Path $BackendDir 'lib'
-$WeightsDir = Join-Path $BackendDir 'weights'
-$CacheDir   = Join-Path $env:TEMP 'pal-backend-cache'
+$RepoRoot    = Split-Path -Parent $PSScriptRoot
+$BackendDir  = Join-Path $RepoRoot 'backend'
+$LibDir      = Join-Path $BackendDir 'lib'
+$WeightsDir  = Join-Path $BackendDir 'weights'
+$WhisperDir  = Join-Path $BackendDir 'whisper'
+$WhisperMdl  = Join-Path $WhisperDir 'models'
+$CacheDir    = Join-Path $env:TEMP 'pal-backend-cache'
 
-foreach ($dir in @($LibDir, $WeightsDir, $CacheDir)) {
+foreach ($dir in @($LibDir, $WeightsDir, $WhisperDir, $WhisperMdl, $CacheDir)) {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
 
 function Get-Archive {
-    param([string] $Name, [string] $Sha256)
+    param(
+        [string] $Name,
+        [string] $Sha256,
+        [string] $Repo    = 'ggml-org/llama.cpp',
+        [string] $Release = $LlamaRelease
+    )
 
     $target = Join-Path $CacheDir $Name
 
@@ -94,7 +120,7 @@ function Get-Archive {
         Remove-Item $target -Force
     }
 
-    $url = "https://github.com/ggml-org/llama.cpp/releases/download/$LlamaRelease/$Name"
+    $url = "https://github.com/$Repo/releases/download/$Release/$Name"
     Write-Host "  fetching $Name"
     Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing
 
@@ -135,6 +161,49 @@ foreach ($glob in $RuntimeGlobs) {
 }
 Remove-Item $staging -Recurse -Force
 Write-Host "  installed $copied files into backend/lib" -ForegroundColor Green
+
+Write-Host "`nwhisper.cpp runtime ($WhisperRelease, cuBLAS 12.4)" -ForegroundColor Cyan
+
+$wStaging = Join-Path $CacheDir "extract-whisper-$WhisperRelease"
+if (Test-Path $wStaging) { Remove-Item $wStaging -Recurse -Force }
+New-Item -ItemType Directory -Path $wStaging -Force | Out-Null
+
+$wZip = Get-Archive -Name $WhisperArchive.Name -Sha256 $WhisperArchive.Sha256 `
+    -Repo 'ggml-org/whisper.cpp' -Release $WhisperRelease
+Expand-Archive -Path $wZip -DestinationPath $wStaging -Force
+
+# The archive nests everything under Release/.
+$wSource = Join-Path $wStaging 'Release'
+if (-not (Test-Path $wSource)) { $wSource = $wStaging }
+
+$wCopied = 0
+foreach ($file in $WhisperFiles) {
+    $src = Join-Path $wSource $file
+    if (-not (Test-Path $src)) {
+        throw "Expected '$file' in the whisper.cpp release but it was not found."
+    }
+    Copy-Item $src -Destination $WhisperDir -Force
+    $wCopied++
+}
+Get-ChildItem -Path $wSource -Filter 'ggml-cpu-*.dll' -File | ForEach-Object {
+    Copy-Item $_.FullName -Destination $WhisperDir -Force
+    $wCopied++
+}
+Remove-Item $wStaging -Recurse -Force
+Write-Host "  installed $wCopied files into backend/whisper" -ForegroundColor Green
+
+$sttModel = Join-Path $WhisperMdl $WhisperModel.File
+if (Test-Path $sttModel) {
+    Write-Host "  present  $($WhisperModel.File)"
+} else {
+    Write-Host "  fetching $($WhisperModel.File) (~574 MB)"
+    Invoke-WebRequest -Uri $WhisperModel.Url -OutFile $sttModel -UseBasicParsing
+    $have = (Get-FileHash -Path $sttModel -Algorithm SHA256).Hash
+    if ($have -ne $WhisperModel.Sha256.ToUpperInvariant()) {
+        Remove-Item $sttModel -Force
+        throw "Checksum mismatch for $($WhisperModel.File)."
+    }
+}
 
 if ($SkipWeights) {
     Write-Host "`nSkipping weights (-SkipWeights)." -ForegroundColor Yellow

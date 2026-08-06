@@ -78,6 +78,9 @@ export interface LocalConfig {
   /** Layers offloaded to GPU; 99 means "all that fit". */
   gpuLayers: number;
   threads: number;
+  /** whisper.cpp model file stem in `backend/whisper/models`. */
+  sttModel: string;
+  sttPort: number;
   /** Kokoro voice id, e.g. `af_heart`. Distinct from the cloud `VoicePersona`. */
   ttsVoice: string;
   ttsSpeed: number;

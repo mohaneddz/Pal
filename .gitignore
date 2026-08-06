@@ -30,6 +30,7 @@ backend/weights/**
 backend/voice/**
 backend/lib/*.dll
 backend/lib/*.exe
+backend/whisper/**
 backend/**.wav
 
 src/.env

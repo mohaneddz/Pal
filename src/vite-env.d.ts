@@ -22,5 +22,7 @@ interface ImportMetaEnv {
   readonly VITE_LOCAL_LLM_CTX?: string;
   readonly VITE_LOCAL_LLM_NGL?: string;
   readonly VITE_LOCAL_LLM_THREADS?: string;
+  readonly VITE_LOCAL_STT_MODEL?: string;
+  readonly VITE_LOCAL_STT_PORT?: string;
   readonly VITE_LOCAL_TTS_VOICE?: string;
 }

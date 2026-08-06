@@ -42,6 +42,8 @@ export const runtimeConfig: RuntimeConfig = {
     contextSize: parseNumber(import.meta.env.VITE_LOCAL_LLM_CTX, 8192),
     gpuLayers: parseNumber(import.meta.env.VITE_LOCAL_LLM_NGL, 99),
     threads: parseNumber(import.meta.env.VITE_LOCAL_LLM_THREADS, 6),
+    sttModel: (import.meta.env.VITE_LOCAL_STT_MODEL ?? "ggml-large-v3-turbo-q5_0").trim(),
+    sttPort: parseNumber(import.meta.env.VITE_LOCAL_STT_PORT, 8081),
     ttsVoice: (import.meta.env.VITE_LOCAL_TTS_VOICE ?? "af_heart").trim(),
     ttsSpeed: 1.0,
   },
