@@ -13,6 +13,8 @@ import {
   synthesizeWithGroq,
   transcribeWithGroq,
 } from "../services/groqClient";
+import { completeWithLocal } from "../services/localClient";
+import { synthesizeWithLocal, transcribeWithLocal } from "../services/localVoice";
 import type {
   ApiUsageStats,
   AssistantMode,
@@ -877,6 +879,36 @@ export function usePalAssistant(): UsePalAssistantResult {
     [beginPlaybackMeter, stopPlaybackMeter],
   );
 
+  /**
+   * Synthesize `text` and play it, routing to Kokoro or Groq per the TTS_LOCAL
+   * toggle. Returns false when speech was skipped (no engine available), so
+   * callers can settle the UI back to idle themselves.
+   */
+  const synthesizeAndPlay = useCallback(
+    async (text: string): Promise<boolean> => {
+      if (runtimeConfig.toggles.TTS_LOCAL) {
+        const chunks = await synthesizeWithLocal(text, settingsRef.current.speechStyle);
+        await playSpeechChunks(chunks);
+        return true;
+      }
+
+      if (!ONLINE_FEATURES_ENABLED || !hasGroqKey) {
+        return false;
+      }
+
+      markApiRequest("speech");
+      const chunks = await synthesizeWithGroq(
+        text,
+        settingsRef.current.voice,
+        settingsRef.current.speechStyle,
+      );
+      refreshQuotaSnapshot();
+      await playSpeechChunks(chunks);
+      return true;
+    },
+    [markApiRequest, playSpeechChunks, refreshQuotaSnapshot],
+  );
+
   const runAssistantTurn = useCallback(
     async (prompt: string) => {
       const trimmed = prompt.trim();
@@ -935,17 +967,39 @@ export function usePalAssistant(): UsePalAssistantResult {
             timerHandlesRef.current.push(timerHandle);
           }
 
-          if (!settings.autoSpeak || runtimeConfig.toggles.TTS_LOCAL || !hasGroqKey) {
+          if (!settings.autoSpeak) {
             setStatus("idle");
             setAudioLevel(0);
             return;
           }
 
-          attemptedApiRequest = true;
-          markApiRequest("speech");
-          const localSpeech = await synthesizeWithGroq(localReply, settings.voice, settings.speechStyle);
-          refreshQuotaSnapshot();
-          await playSpeechChunks(localSpeech);
+          attemptedApiRequest = !runtimeConfig.toggles.TTS_LOCAL;
+          if (!(await synthesizeAndPlay(localReply))) {
+            setStatus("idle");
+            setAudioLevel(0);
+          }
+          return;
+        }
+
+        // The local model needs no key and no network, so it answers before the
+        // cloud-availability guards below.
+        if (runtimeConfig.toggles.LOCAL_LLM) {
+          const localModelReply = await completeWithLocal(
+            messagesWithPrompt,
+            settings.assistantMode,
+          );
+          appendMessage("assistant", localModelReply);
+
+          if (!settings.autoSpeak) {
+            setStatus("idle");
+            return;
+          }
+
+          attemptedApiRequest = !runtimeConfig.toggles.TTS_LOCAL;
+          if (!(await synthesizeAndPlay(localModelReply))) {
+            setStatus("idle");
+            setAudioLevel(0);
+          }
           return;
         }
 
@@ -969,10 +1023,6 @@ export function usePalAssistant(): UsePalAssistantResult {
           return;
         }
 
-        if (runtimeConfig.toggles.LOCAL_LLM) {
-          throw new Error("`LOCAL_LLM=true` is not implemented in this TypeScript build.");
-        }
-
         attemptedApiRequest = true;
         markApiRequest("chat");
         const assistantReply = await completeWithGroq(messagesWithPrompt, settings.assistantMode);
@@ -984,19 +1034,10 @@ export function usePalAssistant(): UsePalAssistantResult {
           return;
         }
 
-        if (runtimeConfig.toggles.TTS_LOCAL) {
-          throw new Error("`TTS_LOCAL=true` is not implemented in this TypeScript build.");
+        if (!(await synthesizeAndPlay(assistantReply))) {
+          setStatus("idle");
+          setAudioLevel(0);
         }
-
-        attemptedApiRequest = true;
-        markApiRequest("speech");
-        const audioChunks = await synthesizeWithGroq(
-          assistantReply,
-          settings.voice,
-          settings.speechStyle,
-        );
-        refreshQuotaSnapshot();
-        await playSpeechChunks(audioChunks);
       } catch (error) {
         if (attemptedApiRequest) {
           markApiFailure();
@@ -1011,12 +1052,10 @@ export function usePalAssistant(): UsePalAssistantResult {
       appendMessage,
       markApiFailure,
       markApiRequest,
-      playSpeechChunks,
       refreshQuotaSnapshot,
+      synthesizeAndPlay,
       settings.assistantMode,
       settings.autoSpeak,
-      settings.speechStyle,
-      settings.voice,
     ],
   );
 
@@ -1193,10 +1232,16 @@ export function usePalAssistant(): UsePalAssistantResult {
       return;
     }
 
+    const useLocalStt = runtimeConfig.toggles.STT_LOCAL;
     try {
-      markApiRequest("transcription");
-      const transcript = await transcribeWithGroq(recordingBlob);
-      refreshQuotaSnapshot();
+      let transcript: string;
+      if (useLocalStt) {
+        transcript = await transcribeWithLocal(recordingBlob);
+      } else {
+        markApiRequest("transcription");
+        transcript = await transcribeWithGroq(recordingBlob);
+        refreshQuotaSnapshot();
+      }
       if (!transcript) {
         setStatus("idle");
         if (resumeAfterTurn && voiceLoopEnabledRef.current) {
@@ -1209,7 +1254,9 @@ export function usePalAssistant(): UsePalAssistantResult {
         pendingResumeListeningRef.current = true;
       }
     } catch (error) {
-      markApiFailure();
+      if (!useLocalStt) {
+        markApiFailure();
+      }
       setStatus("error");
       setErrorMessage(toErrorMessage(error));
     }
@@ -1230,17 +1277,15 @@ export function usePalAssistant(): UsePalAssistantResult {
     if (busyRef.current || isSpeechStatus(status)) {
       return;
     }
-    if (!ONLINE_FEATURES_ENABLED) {
+    // Local Whisper records through the same MediaRecorder path, so it only
+    // needs to skip the cloud-availability guards.
+    const useLocalStt = runtimeConfig.toggles.STT_LOCAL;
+    if (!useLocalStt && !ONLINE_FEATURES_ENABLED) {
       setStatus("error");
       setErrorMessage(cloudDisabledMessage());
       return;
     }
-    if (runtimeConfig.toggles.STT_LOCAL) {
-      setStatus("error");
-      setErrorMessage("`STT_LOCAL=true` is not implemented in this TypeScript build.");
-      return;
-    }
-    if (!hasGroqKey) {
+    if (!useLocalStt && !hasGroqKey) {
       const startedBrowserRecognition = startBrowserRecognition();
       if (!startedBrowserRecognition) {
         setStatus("error");
@@ -1341,44 +1386,35 @@ export function usePalAssistant(): UsePalAssistantResult {
 
       setErrorMessage(null);
 
-      if (!ONLINE_FEATURES_ENABLED) {
+      const useLocalTts = runtimeConfig.toggles.TTS_LOCAL;
+
+      if (!useLocalTts && !ONLINE_FEATURES_ENABLED) {
         setStatus("error");
         setErrorMessage(cloudDisabledMessage());
         return;
       }
 
-      if (!hasGroqKey) {
+      if (!useLocalTts && !hasGroqKey) {
         setStatus("error");
         setErrorMessage("Groq API key is missing. Add `VITE_GROQ_API_KEY` to enable speech synthesis.");
         return;
       }
 
-      if (runtimeConfig.toggles.TTS_LOCAL) {
-        setStatus("error");
-        setErrorMessage("`TTS_LOCAL=true` is not implemented in this TypeScript build.");
-        return;
-      }
-
       try {
         setStatus("processing");
-        markApiRequest("speech");
-        const audioChunks = await synthesizeWithGroq(trimmed, settings.voice, settings.speechStyle);
-        refreshQuotaSnapshot();
-        await playSpeechChunks(audioChunks);
+        if (!(await synthesizeAndPlay(trimmed))) {
+          setStatus("idle");
+          setAudioLevel(0);
+        }
       } catch (error) {
-        markApiFailure();
+        if (!useLocalTts) {
+          markApiFailure();
+        }
         setStatus("error");
         setErrorMessage(toErrorMessage(error));
       }
     },
-    [
-      markApiFailure,
-      markApiRequest,
-      playSpeechChunks,
-      refreshQuotaSnapshot,
-      settings.speechStyle,
-      settings.voice,
-    ],
+    [markApiFailure, synthesizeAndPlay],
   );
 
   const clearConversation = useCallback(() => {

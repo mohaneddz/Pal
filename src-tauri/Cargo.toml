@@ -32,3 +32,6 @@ tauri-plugin-http = "2"
 tauri-plugin-store = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
+# Health-polling the local llama-server; plain HTTP to loopback, so no TLS stack.
+reqwest = { version = "0.12", default-features = false }
+tokio = { version = "1", features = ["time"] }

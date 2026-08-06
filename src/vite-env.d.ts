@@ -17,4 +17,10 @@ interface ImportMetaEnv {
   readonly VITE_GROQ_STT_MODEL?: string;
   readonly VITE_GROQ_TTS_MODEL?: string;
   readonly VITE_GROQ_TTS_VOICE?: string;
+  readonly VITE_LOCAL_LLM_MODEL?: string;
+  readonly VITE_LOCAL_LLM_PORT?: string;
+  readonly VITE_LOCAL_LLM_CTX?: string;
+  readonly VITE_LOCAL_LLM_NGL?: string;
+  readonly VITE_LOCAL_LLM_THREADS?: string;
+  readonly VITE_LOCAL_TTS_VOICE?: string;
 }
