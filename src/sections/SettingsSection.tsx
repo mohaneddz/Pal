@@ -34,7 +34,6 @@ export function SettingsSection({
   setStartWithWindows,
   setStartMinimized,
 }: SettingsSectionProps) {
-  const LOCAL_RUNTIME_DISABLED_HINT = "Local runtime is disabled in this build.";
 
   return (
     <section className="pal-settings-panel">
@@ -108,10 +107,8 @@ export function SettingsSection({
                 id="toggle-local-llm"
                 type="checkbox"
                 checked={runtimeTogglesState.LOCAL_LLM}
-                disabled
-                title={LOCAL_RUNTIME_DISABLED_HINT}
+                title="Run Gemma 3 on this machine instead of the cloud chat model."
                 onChange={(event) => {
-                  runtimeConfig.toggles.LOCAL_LLM = event.target.checked;
                   setRuntimeTogglesState({ ...runtimeTogglesState, LOCAL_LLM: event.target.checked });
                 }}
               />
@@ -125,10 +122,8 @@ export function SettingsSection({
                 id="toggle-local-stt"
                 type="checkbox"
                 checked={runtimeTogglesState.STT_LOCAL}
-                disabled
-                title={LOCAL_RUNTIME_DISABLED_HINT}
+                title="Transcribe with the bundled Whisper model instead of the cloud."
                 onChange={(event) => {
-                  runtimeConfig.toggles.STT_LOCAL = event.target.checked;
                   setRuntimeTogglesState({ ...runtimeTogglesState, STT_LOCAL: event.target.checked });
                 }}
               />
@@ -142,10 +137,8 @@ export function SettingsSection({
                 id="toggle-local-tts"
                 type="checkbox"
                 checked={runtimeTogglesState.TTS_LOCAL}
-                disabled
-                title={LOCAL_RUNTIME_DISABLED_HINT}
+                title="Speak with the bundled Kokoro voice instead of the cloud."
                 onChange={(event) => {
-                  runtimeConfig.toggles.TTS_LOCAL = event.target.checked;
                   setRuntimeTogglesState({ ...runtimeTogglesState, TTS_LOCAL: event.target.checked });
                 }}
               />

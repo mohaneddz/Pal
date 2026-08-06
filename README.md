@@ -14,6 +14,8 @@ PAL is your desktop co-pilot: fast voice chat, sharp text reasoning, and a clean
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-111111?style=for-the-badge)
+![llama.cpp](https://img.shields.io/badge/llama.cpp-222222?style=for-the-badge)
+![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white)
 
 ---
 
@@ -31,7 +33,7 @@ PAL is your desktop co-pilot: fast voice chat, sharp text reasoning, and a clean
 * 🕘 **History + Stats:**
     Track past chats and usage analytics from inside the app.
 
-* ⌨️ **Global Shortcuts + Tray Control:**
+* ⌨️ **Global Shortcuts + Tray Control:**v
     Summon PAL quickly, then hide/show/quit from the system tray.
 
 * 💾 **Persistent Local Settings:**
@@ -78,19 +80,31 @@ PAL is your desktop co-pilot: fast voice chat, sharp text reasoning, and a clean
 
 ## Runtime Modes 🧪
 
-Current default build runs with cloud providers:
+Every stage can run on-device or in the cloud, toggled independently in
+Settings. Mix freely — local chat with cloud speech is a valid setup.
 
-| Flag | Value | Meaning |
-|------|-------|---------|
-| `LOCAL_LLM` | `false` | Chat model runs via cloud API |
-| `STT_LOCAL` | `false` | Speech-to-text runs via cloud API |
-| `TTS_LOCAL` | `false` | Text-to-speech runs via cloud API |
+| Toggle | Local engine | Cloud engine |
+|--------|--------------|--------------|
+| `LOCAL_LLM` | Gemma 3 (llama.cpp) | `llama-3.3-70b-versatile` |
+| `STT_LOCAL` | Whisper large-v3-turbo (whisper.cpp) | `whisper-large-v3-turbo` |
+| `TTS_LOCAL` | Kokoro-82M (ONNX Runtime) | `canopylabs/orpheus-v1-english` |
 
-Default model setup:
+Local chat and transcription run as supervised child processes that expose
+HTTP APIs; Rust owns their lifecycle and reaps them on exit. Kokoro runs
+in-process via ONNX Runtime.
 
-- Chat: `llama-3.3-70b-versatile`
-- STT: `whisper-large-v3-turbo`
-- TTS: `canopylabs/orpheus-v1-english`
+Measured on an RTX 4070 Laptop (8 GB):
+
+| Workload | Throughput |
+|----------|-----------|
+| Gemma 3 4b q4_0, CUDA | ~50 tok/s |
+| Gemma 3 4b q4_0, CPU | ~9.6 tok/s |
+| Gemma 3 1b q4_0, CPU | ~30 tok/s |
+| Whisper large-v3-turbo q5_0 | 11 s audio in 0.77 s |
+
+> Vulkan measured ~0.8 tok/s on this hardware — 12x slower than CPU — so the
+> CUDA build is used. Machines without an NVIDIA GPU fall back to CPU
+> automatically; llama.cpp and whisper.cpp both ship CPU backends alongside.
 
 ---
 
@@ -111,8 +125,19 @@ Default model setup:
 │   ├── styles/
 │   ├── App.tsx
 │   └── main.tsx
+├── scripts/
+│   └── fetch-backend.ps1   # Downloads the local inference payloads
 ├── src-tauri/              # Rust + Tauri desktop backend
-└── backend/                # Optional/local experimentation backend
+│   └── src/
+│       ├── server.rs       # Shared child-process supervision
+│       ├── llm.rs          # llama.cpp lifecycle
+│       ├── stt.rs          # whisper.cpp lifecycle
+│       └── tts.rs          # Kokoro ONNX inference
+└── backend/                # Local model payloads (untracked, fetched)
+    ├── lib/                # llama-server + CUDA redistributables
+    ├── weights/            # Gemma 3 GGUF weights
+    ├── whisper/            # whisper-server + model
+    └── tts/                # Kokoro ONNX, voices, espeak-ng
 ```
 
 ---
@@ -123,13 +148,23 @@ Default model setup:
    - Node.js (v18+)
    - Rust toolchain
    - Tauri CLI
+   - NVIDIA GPU + driver (optional — enables CUDA; CPU works without it)
 
 2. **Install dependencies:**
    ```sh
    pnpm install
    ```
 
-3. **Configure environment:**
+3. **Fetch the local inference runtime:**
+   Downloads llama.cpp, whisper.cpp, Gemma 3, Whisper and Kokoro into
+   `backend/` against pinned releases with checksum verification. These are
+   deliberately untracked — roughly 6 GB in total.
+   ```sh
+   pwsh -File scripts/fetch-backend.ps1
+   ```
+   Pass `-SkipWeights` to fetch only the runtimes.
+
+4. **Configure environment:**
    Create/update `src/.env`:
    ```env
    LOCAL_LLM=false
@@ -142,14 +177,22 @@ Default model setup:
    VITE_GROQ_STT_MODEL=whisper-large-v3-turbo
    VITE_GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
    VITE_GROQ_TTS_VOICE=troy
+
+   # Optional local overrides
+   VITE_LOCAL_LLM_MODEL=gemma-3-4b-it-q4_0
+   VITE_LOCAL_LLM_PORT=8080
+   VITE_LOCAL_STT_PORT=8081
    ```
 
-4. **Run in development:**
+   > Only the `VITE_GROQ_*` values matter for cloud mode; local mode needs no
+   > key at all.
+
+5. **Run in development:**
    ```sh
    pnpm tauri dev
    ```
 
-5. **Other useful commands:**
+6. **Other useful commands:**
    ```sh
    pnpm dev
    pnpm build
@@ -174,6 +217,7 @@ Default model setup:
 - [x] Start with OS
 
 ### Phase 2: Expansion
+- [x] Fully local LLM / STT / TTS stack (2.0)
 - [ ] More local model runtime options
 - [ ] Deeper assistant mode customization
 - [ ] Improved session intelligence and memory controls
@@ -182,8 +226,8 @@ Default model setup:
 
 ## Notes
 
-- Current setup is Windows-first.
-- Active flow does not require a Python backend.
+- Current setup is Windows-first; `fetch-backend.ps1` is PowerShell.
+- No Python is involved anywhere in the runtime.
 - App data is persisted locally via Tauri plugins.
 
 ---

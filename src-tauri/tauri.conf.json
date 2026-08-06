@@ -30,6 +30,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../backend/lib": "backend/lib",
+      "../backend/weights": "backend/weights",
+      "../backend/whisper": "backend/whisper",
+      "../backend/tts": "backend/tts"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
