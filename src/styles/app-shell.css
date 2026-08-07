@@ -198,9 +198,9 @@ html.pal-window-fullscreen .pal-frame {
 }
 
 .pal-rail-item:hover {
-  transform: scale(1.02);
   border-color: rgba(121, 186, 255, 0.46);
   background: linear-gradient(155deg, rgba(28, 50, 92, 0.62), rgba(18, 35, 66, 0.52));
+  box-shadow: 0 4px 14px rgba(37, 124, 255, 0.22);
 }
 
 .pal-rail-item.active {
