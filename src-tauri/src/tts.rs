@@ -228,6 +228,19 @@ fn synthesize_clause(
     Ok(audio.to_vec())
 }
 
+/// Whether the ONNX session is already warm. The session loads lazily on
+/// first synthesis, so a fresh app start reports `false` until then — that
+/// load is what makes the very first utterance slower than the rest.
+#[tauri::command]
+pub fn local_tts_status(app: AppHandle) -> Result<bool, String> {
+    let state = app.state::<TtsState>();
+    let guard = state
+        .session
+        .lock()
+        .map_err(|_| "TTS state poisoned".to_string())?;
+    Ok(guard.is_some())
+}
+
 #[tauri::command]
 pub async fn local_tts_synthesize(
     app: AppHandle,
