@@ -15,6 +15,7 @@ import {
 } from "../services/groqClient";
 import { completeWithLocal } from "../services/localClient";
 import { synthesizeWithLocal, transcribeWithLocal } from "../services/localVoice";
+import { sanitizeForSpeech } from "../utils/ttsText";
 import type {
   ApiUsageStats,
   AssistantMode,
@@ -886,9 +887,14 @@ export function usePalAssistant(): UsePalAssistantResult {
    */
   const synthesizeAndPlay = useCallback(
     async (text: string): Promise<boolean> => {
+      const spoken = sanitizeForSpeech(text);
+      if (!spoken) {
+        return false;
+      }
+
       if (runtimeConfig.toggles.TTS_LOCAL) {
         const chunks = await synthesizeWithLocal(
-          text,
+          spoken,
           settingsRef.current.voice,
           settingsRef.current.speechStyle,
         );
@@ -902,7 +908,7 @@ export function usePalAssistant(): UsePalAssistantResult {
 
       markApiRequest("speech");
       const chunks = await synthesizeWithGroq(
-        text,
+        spoken,
         settingsRef.current.voice,
         settingsRef.current.speechStyle,
       );
