@@ -33,7 +33,7 @@ PAL is your desktop co-pilot: fast voice chat, sharp text reasoning, and a clean
 * 🕘 **History + Stats:**
     Track past chats and usage analytics from inside the app.
 
-* ⌨️ **Global Shortcuts + Tray Control:**v
+* ⌨️ **Global Shortcuts + Tray Control:**
     Summon PAL quickly, then hide/show/quit from the system tray.
 
 * 💾 **Persistent Local Settings:**
