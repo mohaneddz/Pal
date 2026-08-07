@@ -24,9 +24,114 @@
 .titlebar-left {
   display: flex;
   align-items: center;
+  margin-right: auto;
   -webkit-app-region: no-drag;
   position: relative;
   z-index: 1;
+}
+
+/* System health dot + hover card */
+.status-indicator {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 4px;
+  cursor: default;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(140, 155, 180, 0.6);
+  box-shadow: 0 0 0 3px rgba(140, 155, 180, 0.12);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.status-indicator.level-good .status-dot {
+  background: #4dabf7;
+  box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.18);
+}
+
+.status-indicator.level-warn .status-dot {
+  background: #ffc44d;
+  box-shadow: 0 0 0 3px rgba(255, 196, 77, 0.18);
+}
+
+.status-indicator.level-bad .status-dot {
+  background: #ff5a5f;
+  box-shadow: 0 0 0 3px rgba(255, 90, 95, 0.2);
+}
+
+.status-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 240px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(104, 148, 255, 0.25);
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+  z-index: 10000;
+  -webkit-app-region: no-drag;
+}
+
+.status-indicator:hover .status-card,
+.status-indicator:focus-within .status-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.status-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(200, 220, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.status-row-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(140, 155, 180, 0.6);
+}
+
+.status-row.level-good .status-row-dot { background: #4dabf7; }
+.status-row.level-warn .status-row-dot { background: #ffc44d; }
+.status-row.level-bad .status-row-dot { background: #ff5a5f; }
+
+.status-row-label {
+  flex-shrink: 0;
+  width: 30px;
+  font-weight: 600;
+  color: rgba(230, 242, 255, 0.92);
+}
+
+.status-row-detail {
+  min-width: 0;
+  flex: 1;
+  color: rgba(200, 220, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .titlebar::before {

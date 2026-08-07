@@ -2,14 +2,68 @@ import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./Titlebar.css";
 
+import type { LocalServerStatus, RuntimeToggles } from "../types/pal";
+
+type HealthLevel = "good" | "warn" | "bad" | "neutral";
+
+interface HealthRow {
+  label: string;
+  level: HealthLevel;
+  detail: string;
+}
+
 interface TitlebarProps {
   minimizeToTray?: boolean;
   autoFreeRam?: boolean;
+  toggles?: RuntimeToggles;
+  llmStatus?: LocalServerStatus | null;
+  sttStatus?: LocalServerStatus | null;
+  /** `null` when local TTS is off, otherwise whether Kokoro's session is warm. */
+  ttsWarm?: boolean | null;
+}
+
+/** Turns a supervised local-server status into a titlebar health row. */
+function serverHealth(label: string, enabled: boolean, status: LocalServerStatus | null | undefined): HealthRow {
+  if (!enabled) {
+    return { label, level: "neutral", detail: "Using cloud" };
+  }
+  switch (status?.state) {
+    case "ready":
+      return { label, level: "good", detail: status.model ? `Ready — ${status.model}` : "Ready" };
+    case "starting":
+      return { label, level: "warn", detail: "Starting…" };
+    case "error":
+      return { label, level: "bad", detail: status.message || "Error" };
+    default:
+      return { label, level: "warn", detail: "Stopped" };
+  }
+}
+
+function ttsHealth(enabled: boolean, warm: boolean | null | undefined): HealthRow {
+  if (!enabled) {
+    return { label: "TTS", level: "neutral", detail: "Using cloud" };
+  }
+  if (warm) {
+    return { label: "TTS", level: "good", detail: "Ready (warm)" };
+  }
+  return { label: "TTS", level: "warn", detail: "Idle — first line will be slower to load" };
+}
+
+const LEVEL_RANK: Record<HealthLevel, number> = { bad: 3, warn: 2, good: 1, neutral: 0 };
+
+function worstLevel(rows: HealthRow[]): HealthLevel {
+  return rows.reduce<HealthLevel>((worst, row) => {
+    return LEVEL_RANK[row.level] > LEVEL_RANK[worst] ? row.level : worst;
+  }, "neutral");
 }
 
 export function Titlebar({
   minimizeToTray = false,
   autoFreeRam = false,
+  toggles,
+  llmStatus,
+  sttStatus,
+  ttsWarm,
 }: TitlebarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -188,12 +242,39 @@ export function Titlebar({
     };
   }, [handleFullscreenToggle]);
 
+  const healthRows: HealthRow[] = [
+    serverHealth("LLM", toggles?.LOCAL_LLM ?? false, llmStatus),
+    serverHealth("STT", toggles?.STT_LOCAL ?? false, sttStatus),
+    ttsHealth(toggles?.TTS_LOCAL ?? false, ttsWarm),
+  ];
+  const overallLevel = worstLevel(healthRows);
+
   return (
     <header
       className={`titlebar ${isFullscreen ? "is-fullscreen" : ""}`}
       onMouseDown={handleDragStart}
       onDoubleClick={handleDoubleClick}
     >
+      {!isFullscreen && (
+        <div className="titlebar-left">
+          <div className={`status-indicator level-${overallLevel}`}>
+            <span className="status-dot" aria-hidden="true" />
+            <div className="status-card" role="status">
+              <div className="status-card-title">System health</div>
+              {healthRows.map((row) => (
+                <div key={row.label} className={`status-row level-${row.level}`}>
+                  <span className="status-row-dot" aria-hidden="true" />
+                  <span className="status-row-label">{row.label}</span>
+                  <span className="status-row-detail" title={row.detail}>
+                    {row.detail}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isFullscreen && (
         <div className="titlebar-controls">
           <button
