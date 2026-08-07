@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
 
 import { getLocalLlmStatus, startLocalLlm, stopLocalLlm } from "../services/localClient";
-import { getLocalSttStatus, startLocalStt, stopLocalStt } from "../services/localVoice";
+import {
+  getLocalSttStatus,
+  getLocalTtsStatus,
+  startLocalStt,
+  stopLocalStt,
+} from "../services/localVoice";
 import type { LocalServerStatus, RuntimeToggles } from "../types/pal";
 
 const POLL_STARTING_MS = 1500;
 /** Heartbeat once ready, mainly to notice a server that crashed on its own. */
 const POLL_READY_MS = 8000;
+/** TTS has no process to crash-detect; a slow poll just catches the
+ * warm-up transition after the first synthesis. */
+const TTS_POLL_MS = 4000;
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -78,9 +86,55 @@ function useSupervisedServer(
   return status;
 }
 
+/**
+ * Kokoro has no child process to supervise, just a lazily-loaded ONNX
+ * session, so this only ever answers "warm" or "not warm yet" — there is no
+ * "starting"/"error" state to poll for.
+ */
+function useTtsWarmState(enabled: boolean): boolean | null {
+  const [warm, setWarm] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setWarm(null);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const tick = async () => {
+      try {
+        const loaded = await getLocalTtsStatus();
+        if (!cancelled) {
+          setWarm(loaded);
+        }
+      } catch {
+        // Best-effort: leave the last known state rather than flashing errors.
+      }
+      timer = window.setTimeout(() => {
+        void tick();
+      }, TTS_POLL_MS);
+    };
+
+    void tick();
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [enabled]);
+
+  return warm;
+}
+
 export interface LocalRuntimeStatus {
   llmStatus: LocalServerStatus | null;
   sttStatus: LocalServerStatus | null;
+  /** `null` when TTS_LOCAL is off, otherwise whether Kokoro's session is warm. */
+  ttsWarm: boolean | null;
 }
 
 /**
@@ -110,6 +164,7 @@ export function useLocalRuntimeStatus(
     stopLocalStt,
     getLocalSttStatus,
   );
+  const ttsWarm = useTtsWarmState(toggles.TTS_LOCAL);
 
-  return { llmStatus, sttStatus };
+  return { llmStatus, sttStatus, ttsWarm };
 }
