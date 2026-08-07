@@ -160,6 +160,7 @@ pub fn run() {
             stt::local_stt_stop,
             stt::local_stt_status,
             tts::local_tts_synthesize,
+            tts::local_tts_status,
         ])
         .setup(|app| {
             if should_start_minimized(app.handle()) {
