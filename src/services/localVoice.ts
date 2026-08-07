@@ -33,6 +33,11 @@ export async function getLocalSttStatus(): Promise<LocalServerStatus> {
   return invoke<LocalServerStatus>("local_stt_status");
 }
 
+/** Whether Kokoro's ONNX session is already warm (loaded on first synthesis). */
+export async function getLocalTtsStatus(): Promise<boolean> {
+  return invoke<boolean>("local_tts_status");
+}
+
 /**
  * Decode whatever container MediaRecorder produced (typically WebM/Opus) and
  * resample it to the mono 16 kHz PCM whisper wants. Doing this with WebAudio
