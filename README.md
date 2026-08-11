@@ -4,6 +4,8 @@
 </h1>
 PAL is your desktop co-pilot: fast voice chat, sharp text reasoning, and a clean Tauri-native experience that stays close to your workflow instead of living in a browser tab.
 
+**Status:** Phase 1 (voice/text assistant, tray, shortcuts, start-with-OS) and the fully-local LLM/STT/TTS stack (2.0) are complete and working, with a clean, up-to-date working tree. Phase 2 items — more local runtime options, deeper mode customization, session memory — are still open.
+
 ---
 
 ## Tech Used 🧑‍💻
