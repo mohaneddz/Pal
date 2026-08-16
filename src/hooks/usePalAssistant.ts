@@ -15,6 +15,12 @@ import {
 } from "../services/groqClient";
 import { completeWithLocal } from "../services/localClient";
 import { synthesizeWithLocal, transcribeWithLocal } from "../services/localVoice";
+import {
+  executeAction,
+  fetchActionDescriptors,
+  type ActionDescriptor,
+  type RawToolCall,
+} from "../services/toolCalling";
 import { sanitizeForSpeech } from "../utils/ttsText";
 import type {
   ApiUsageStats,
@@ -22,6 +28,7 @@ import type {
   AssistantStatus,
   ChatMessage,
   PalUiSettings,
+  PendingAction,
   SpeechStyle,
   VoicePersona,
 } from "../types/pal";
@@ -44,6 +51,7 @@ const DEFAULT_SETTINGS: PalUiSettings = {
   autoFreeRam: false,
   startWithWindows: false,
   startMinimized: false,
+  pcActionsEnabled: false,
 };
 
 const SPEAKING_STATUSES: AssistantStatus[] = ["processing", "speaking"];
@@ -147,6 +155,9 @@ function sanitizeSettings(value: unknown): PalUiSettings {
       : DEFAULT_SETTINGS.autoFreeRam,
     startWithWindows,
     startMinimized,
+    pcActionsEnabled: typeof parsed.pcActionsEnabled === "boolean"
+      ? parsed.pcActionsEnabled
+      : DEFAULT_SETTINGS.pcActionsEnabled,
   };
 }
 
@@ -345,6 +356,7 @@ export interface UsePalAssistantResult {
   setAutoFreeRam: (enabled: boolean) => void;
   setStartWithWindows: (enabled: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
+  setPcActionsEnabled: (enabled: boolean) => void;
 }
 
 export function usePalAssistant(): UsePalAssistantResult {
@@ -367,6 +379,7 @@ export function usePalAssistant(): UsePalAssistantResult {
   const storeHydratedRef = useRef(false);
   const apiUsageRef = useRef(apiUsage);
   const settingsRef = useRef(settings);
+  const actionDescriptorsRef = useRef<ActionDescriptor[]>([]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingSessionRef = useRef(0);
@@ -413,6 +426,20 @@ export function usePalAssistant(): UsePalAssistantResult {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  useEffect(() => {
+    if (!settings.pcActionsEnabled) {
+      actionDescriptorsRef.current = [];
+      return;
+    }
+    fetchActionDescriptors()
+      .then((descriptors) => {
+        actionDescriptorsRef.current = descriptors;
+      })
+      .catch(() => {
+        actionDescriptorsRef.current = [];
+      });
+  }, [settings.pcActionsEnabled]);
 
   const persistStateSnapshot = useCallback(
     async (
@@ -723,12 +750,17 @@ export function usePalAssistant(): UsePalAssistantResult {
     [stopPlaybackMeter],
   );
 
-  const appendMessage = useCallback((role: ChatMessage["role"], content: string): ChatMessage[] => {
+  const appendMessage = useCallback((
+    role: ChatMessage["role"],
+    content: string,
+    action?: PendingAction,
+  ): ChatMessage[] => {
     const nextMessage: ChatMessage = {
       id: generateMessageId(),
       role,
       content,
       createdAt: Date.now(),
+      ...(action ? { action } : {}),
     };
 
     const nextMessages = [...messagesRef.current, nextMessage];
@@ -991,13 +1023,102 @@ export function usePalAssistant(): UsePalAssistantResult {
           return;
         }
 
+        const handleToolCall = async (
+          call: RawToolCall,
+          promptMessages: ChatMessage[],
+          transport: "local" | "groq",
+        ) => {
+          const descriptor = actionDescriptorsRef.current.find((item) => item.name === call.name);
+          const risk = descriptor?.risk ?? "confirm_required";
+
+          if (risk === "confirm_required") {
+            // No confirm-required actions are offered yet (Phase A ships only
+            // read-only actions), but handle the shape defensively so this
+            // doesn't silently auto-run something it shouldn't once Phase B
+            // adds write actions.
+            appendMessage("assistant", `Wants to run: ${call.name}`, {
+              id: call.id,
+              name: call.name,
+              args: call.arguments,
+              risk,
+              status: "pending",
+            });
+            setStatus("idle");
+            setAudioLevel(0);
+            return;
+          }
+
+          const result = await executeAction(call.name, call.arguments, true);
+          const action: PendingAction = {
+            id: call.id,
+            name: call.name,
+            args: call.arguments,
+            risk,
+            status: result.success ? "succeeded" : "failed",
+            result: result.output,
+            error: result.error,
+          };
+          const summary = result.success
+            ? `Ran ${call.name}.`
+            : `Failed to run ${call.name}: ${result.error ?? "unknown error"}`;
+          appendMessage("assistant", summary, action);
+
+          // Narrate the result in natural language. This is a plain follow-up
+          // turn (no tools offered again), and the synthetic prompt is never
+          // persisted to the visible chat history.
+          const narrationPrompt: ChatMessage = {
+            id: generateMessageId(),
+            role: "user",
+            content: `Tool result for ${call.name}: ${JSON.stringify(
+              result.success ? result.output : result.error,
+            )}. Summarize this for me in one or two sentences.`,
+            createdAt: Date.now(),
+          };
+          const narrationMessages = [...promptMessages, narrationPrompt];
+
+          let narrationText = "";
+          try {
+            const completion = transport === "local"
+              ? await completeWithLocal(narrationMessages, settings.assistantMode)
+              : await completeWithGroq(narrationMessages, settings.assistantMode);
+            narrationText = completion.content ?? "";
+          } catch {
+            narrationText = "";
+          }
+
+          if (narrationText) {
+            appendMessage("assistant", narrationText);
+          }
+
+          if (!settings.autoSpeak) {
+            setStatus("idle");
+            setAudioLevel(0);
+            return;
+          }
+
+          attemptedApiRequest = transport === "groq" || !runtimeConfig.toggles.TTS_LOCAL;
+          if (!(await synthesizeAndPlay(narrationText || summary))) {
+            setStatus("idle");
+            setAudioLevel(0);
+          }
+        };
+
         // The local model needs no key and no network, so it answers before the
         // cloud-availability guards below.
         if (runtimeConfig.toggles.LOCAL_LLM) {
-          const localModelReply = await completeWithLocal(
+          const localTools = settings.pcActionsEnabled ? actionDescriptorsRef.current : [];
+          const localCompletion = await completeWithLocal(
             messagesWithPrompt,
             settings.assistantMode,
+            localTools,
           );
+
+          if (localCompletion.toolCall) {
+            await handleToolCall(localCompletion.toolCall, messagesWithPrompt, "local");
+            return;
+          }
+
+          const localModelReply = localCompletion.content ?? "";
           appendMessage("assistant", localModelReply);
 
           if (!settings.autoSpeak) {
@@ -1035,8 +1156,16 @@ export function usePalAssistant(): UsePalAssistantResult {
 
         attemptedApiRequest = true;
         markApiRequest("chat");
-        const assistantReply = await completeWithGroq(messagesWithPrompt, settings.assistantMode);
+        const groqTools = settings.pcActionsEnabled ? actionDescriptorsRef.current : [];
+        const groqCompletion = await completeWithGroq(messagesWithPrompt, settings.assistantMode, groqTools);
         refreshQuotaSnapshot();
+
+        if (groqCompletion.toolCalls?.length) {
+          await handleToolCall(groqCompletion.toolCalls[0], messagesWithPrompt, "groq");
+          return;
+        }
+
+        const assistantReply = groqCompletion.content ?? "";
         appendMessage("assistant", assistantReply);
 
         if (!settings.autoSpeak) {
@@ -1556,6 +1685,10 @@ export function usePalAssistant(): UsePalAssistantResult {
     }));
   }, [updateSettings]);
 
+  const setPcActionsEnabled = useCallback((enabled: boolean) => {
+    updateSettings((previous) => ({ ...previous, pcActionsEnabled: enabled }));
+  }, [updateSettings]);
+
   useEffect(
     () => () => {
       if (browserRecognitionRef.current) {
@@ -1602,6 +1735,7 @@ export function usePalAssistant(): UsePalAssistantResult {
       setAutoFreeRam,
       setStartWithWindows,
       setStartMinimized,
+      setPcActionsEnabled,
     }),
     [
       messages,
@@ -1627,6 +1761,7 @@ export function usePalAssistant(): UsePalAssistantResult {
       setAutoFreeRam,
       setStartWithWindows,
       setStartMinimized,
+      setPcActionsEnabled,
     ],
   );
 

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { localLlmBaseUrl, runtimeConfig } from "../config/runtime";
 import { buildSystemPrompt, resolveModeConfig } from "./prompts";
+import { buildLocalToolInstructions, parseLocalToolCall, type ActionDescriptor, type RawToolCall } from "./toolCalling";
 import type { AssistantMode, ChatMessage, LocalServerStatus } from "../types/pal";
 
 /**
@@ -45,10 +46,16 @@ export async function getLocalLlmStatus(): Promise<LocalServerStatus> {
   return invoke<LocalServerStatus>("local_llm_status");
 }
 
+export interface LocalCompletion {
+  content: string | null;
+  toolCall: RawToolCall | null;
+}
+
 export async function completeWithLocal(
   messages: ChatMessage[],
   mode: AssistantMode = "advisor",
-): Promise<string> {
+  tools: ActionDescriptor[] = [],
+): Promise<LocalCompletion> {
   // First prompt after a cold start pays the model-load cost here rather than
   // failing with a connection error.
   const status = await startLocalLlm();
@@ -57,13 +64,16 @@ export async function completeWithLocal(
   }
 
   const modeConfig = resolveModeConfig(mode);
+  const systemPrompt = tools.length
+    ? `${buildSystemPrompt(mode)}\n\n${buildLocalToolInstructions(tools)}`
+    : buildSystemPrompt(mode);
   const payload = {
     model: runtimeConfig.local.llmModel,
     temperature: modeConfig.temperature,
     max_tokens: modeConfig.maxTokens,
     stream: false,
     messages: [
-      { role: "system", content: buildSystemPrompt(mode) },
+      { role: "system", content: systemPrompt },
       ...messages.map((message) => ({
         role: message.role,
         content: message.content,
@@ -89,5 +99,7 @@ export async function completeWithLocal(
   if (!content) {
     throw new Error("Local model returned an empty response.");
   }
-  return content;
+
+  const toolCall = tools.length ? parseLocalToolCall(content) : null;
+  return toolCall ? { content: null, toolCall } : { content, toolCall: null };
 }

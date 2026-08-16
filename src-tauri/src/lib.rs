@@ -1,4 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod actions;
+mod calc;
 mod llm;
 mod server;
 mod stt;
@@ -153,6 +155,8 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             greet,
+            actions::actions_list_available,
+            actions::actions_execute,
             llm::local_llm_start,
             llm::local_llm_stop,
             llm::local_llm_status,

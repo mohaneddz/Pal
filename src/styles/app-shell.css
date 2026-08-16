@@ -1200,6 +1200,50 @@ html.pal-window-fullscreen .pal-frame {
   margin-top: 6px;
 }
 
+.pal-action-card {
+  border-radius: 14px;
+  border: 1px solid rgba(104, 167, 255, 0.36);
+  background: rgba(30, 49, 87, 0.5);
+  color: rgba(204, 232, 255, 0.9);
+  padding: 10px 14px;
+  font-size: 0.84rem;
+  margin-top: 8px;
+}
+
+.pal-action-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pal-action-card-name {
+  font-family: monospace;
+  font-size: 0.82rem;
+}
+
+.pal-action-card-status {
+  font-size: 0.76rem;
+  color: rgba(184, 206, 245, 0.72);
+}
+
+.pal-action-card-error {
+  margin: 6px 0 0;
+  color: rgba(255, 222, 222, 0.96);
+  font-size: 0.8rem;
+}
+
+.pal-action-card-succeeded {
+  border-color: rgba(110, 235, 180, 0.42);
+  background: rgba(20, 79, 61, 0.4);
+}
+
+.pal-action-card-failed,
+.pal-action-card-denied {
+  border-color: rgba(255, 110, 110, 0.46);
+  background: rgba(96, 29, 45, 0.44);
+}
+
 .pal-chat-placeholder {
   border: 1px dashed rgba(118, 160, 255, 0.34);
   border-radius: 16px;

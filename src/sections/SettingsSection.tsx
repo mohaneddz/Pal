@@ -27,6 +27,7 @@ interface SettingsSectionProps {
   setAutoFreeRam: (enabled: boolean) => void;
   setStartWithWindows: (enabled: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
+  setPcActionsEnabled: (enabled: boolean) => void;
 }
 
 /** Small status line under a local-runtime toggle. Renders nothing once the
@@ -84,6 +85,7 @@ export function SettingsSection({
   setAutoFreeRam,
   setStartWithWindows,
   setStartMinimized,
+  setPcActionsEnabled,
 }: SettingsSectionProps) {
 
   return (
@@ -411,6 +413,29 @@ export function SettingsSection({
           <p className="pal-setting-hint">
             Auto free RAM destroys the main window instead of hiding it, and restores it from tray/shortcuts.
             It does not stop local model servers — turn off the local toggles above to free that VRAM.
+          </p>
+        </article>
+
+        <article className="pal-setting-block">
+          <h3>PC Actions</h3>
+          <div className="pal-setting-switch">
+            <label htmlFor="toggle-pc-actions">Let Pal take actions on this PC</label>
+            <label className="pal-switch-control" htmlFor="toggle-pc-actions">
+              <input
+                id="toggle-pc-actions"
+                type="checkbox"
+                checked={settings.pcActionsEnabled}
+                title="Allow Pal to read files and system info. Any write, delete, install, or settings change always asks for confirmation first."
+                onChange={(event) => {
+                  setPcActionsEnabled(event.target.checked);
+                }}
+              />
+              <span className="pal-switch-slider" aria-hidden="true" />
+            </label>
+          </div>
+          <p className="pal-setting-hint">
+            Read-only actions (reading files, checking disk space, calculations) run automatically.
+            Anything that changes your PC always asks for confirmation first.
           </p>
         </article>
       </div>

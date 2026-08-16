@@ -1,5 +1,6 @@
 import { runtimeConfig } from "../config/runtime";
 import { buildSystemPrompt, resolveModeConfig } from "./prompts";
+import { buildOpenAiTools, parseGroqToolCalls, type ActionDescriptor, type RawToolCall } from "./toolCalling";
 import type {
   ApiQuotaSnapshot,
   AssistantMode,
@@ -18,8 +19,18 @@ interface GroqChatResponse {
   choices?: Array<{
     message?: {
       content?: string;
+      tool_calls?: Array<{
+        id?: string;
+        type?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
     };
   }>;
+}
+
+export interface GroqCompletion {
+  content: string | null;
+  toolCalls: RawToolCall[] | null;
 }
 
 interface GroqTranscriptionResponse {
@@ -217,7 +228,8 @@ function buildSpeechInput(text: string, style: SpeechStyle): string {
 export async function completeWithGroq(
   messages: ChatMessage[],
   mode: AssistantMode = "advisor",
-): Promise<string> {
+  tools: ActionDescriptor[] = [],
+): Promise<GroqCompletion> {
   requireGroqKey();
 
   const endpoint = `${runtimeConfig.baseUrl}/chat/completions`;
@@ -233,6 +245,7 @@ export async function completeWithGroq(
         content: message.content,
       })),
     ],
+    ...(tools.length ? { tools: buildOpenAiTools(tools), tool_choice: "auto" } : {}),
   };
 
   const response = await fetch(endpoint, {
@@ -247,11 +260,15 @@ export async function completeWithGroq(
   }
 
   const data = (await response.json()) as GroqChatResponse;
-  const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) {
+  const message = data.choices?.[0]?.message;
+  const toolCalls = parseGroqToolCalls(message?.tool_calls);
+  const content = message?.content?.trim();
+
+  if (!content && !toolCalls) {
     throw new Error("Groq returned an empty assistant response.");
   }
-  return content;
+
+  return { content: content || null, toolCalls };
 }
 
 export async function transcribeWithGroq(audioBlob: Blob): Promise<string> {

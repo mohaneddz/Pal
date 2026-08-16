@@ -4,6 +4,7 @@ import { Copy, Ellipsis, Paperclip, PenLine, RefreshCcw, Volume2 } from "lucide-
 import { ONLINE_FEATURES_ENABLED, ONLINE_FEATURES_FUTURE_HINT } from "../../config/runtime";
 import type { ChatMessage } from "../../types/pal";
 import { formatTime } from "./utils";
+import { ActionCard } from "./ActionCard";
 import { MessageMarkdown } from "./MessageMarkdown";
 
 interface ChatPanelProps {
@@ -262,6 +263,7 @@ export function ChatPanel({
               <time>{formatTime(message.createdAt)}</time>
             </header>
             <MessageMarkdown content={message.content} />
+            {message.action && <ActionCard action={message.action} />}
             <footer className="pal-bubble-actions">
               <button
                 type="button"

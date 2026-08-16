@@ -17,11 +17,29 @@ export type AssistantMode =
   | "creative"
   | "guardian";
 
+export type PendingActionStatus =
+  | "pending"
+  | "denied"
+  | "executing"
+  | "succeeded"
+  | "failed";
+
+export interface PendingAction {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  risk: "auto_run" | "confirm_required";
+  status: PendingActionStatus;
+  result?: unknown;
+  error?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: number;
+  action?: PendingAction;
 }
 
 export interface ApiQuotaSnapshot {
@@ -107,4 +125,5 @@ export interface PalUiSettings {
   autoFreeRam: boolean;
   startWithWindows: boolean;
   startMinimized: boolean;
+  pcActionsEnabled: boolean;
 }
