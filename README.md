@@ -115,7 +115,6 @@ Measured on an RTX 4070 Laptop (8 GB):
 ```plaintext
 / (root)
 ├── README.md
-├── AnotherProject.md
 ├── package.json
 ├── vite.config.ts
 ├── screenshots/            # App screenshots used in this README
